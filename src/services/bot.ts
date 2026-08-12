@@ -240,8 +240,9 @@ export const evaluateBotTurn = (state: GameState, botId: string, style: BotStyle
       }
     }
 
-    // 3D. Play money or cash cards directly to bank
-    if (card.type === 'Money' || (card.type === 'Action' && (style === 'Hoarder' || bot.bank.length < 3))) {
+    // 3D. Play money or cash cards directly to bank (excluding Just Say No)
+    const isJSN = card.type === 'Action' && (card as ActionCard).actionType === 'Just Say No';
+    if (!isJSN && (card.type === 'Money' || (card.type === 'Action' && (style === 'Hoarder' || bot.bank.length < 3)))) {
       return {
         action: {
           type: 'PLAY_CARD',
@@ -267,8 +268,8 @@ export const evaluateBotTurn = (state: GameState, botId: string, style: BotStyle
     };
   }
 
-  // Otherwise, play whatever money/action can be banked
-  const bankables = hand.filter(c => c.type === 'Money' || c.type === 'Action');
+  // Otherwise, play whatever money/action can be banked, excluding Just Say No
+  const bankables = hand.filter(c => c.type === 'Money' || (c.type === 'Action' && (c as ActionCard).actionType !== 'Just Say No'));
   if (bankables.length > 0) {
     const card = bankables[0];
     return {

@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useEffect } from 'react';
 
 export type SoundEffectType =
   | 'cardSweep'       // Card deal/draw / slide sweep
@@ -24,10 +24,27 @@ export const useFoly = () => {
     }
     // Resume context if suspended (browser security policy)
     if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
-      audioCtxRef.current.resume();
+      audioCtxRef.current.resume().catch((err) => {
+        console.warn('Foly AudioContext resume failed/interrupted:', err);
+      });
     }
     return audioCtxRef.current;
   };
+
+  // Add unmount cleanup that closes any created AudioContext and clears the ref
+  useEffect(() => {
+    return () => {
+      if (audioCtxRef.current) {
+        const ctx = audioCtxRef.current;
+        audioCtxRef.current = null;
+        if (ctx.state !== 'closed') {
+          ctx.close().catch((err) => {
+            console.warn('Error closing Foly AudioContext during cleanup:', err);
+          });
+        }
+      }
+    };
+  }, []);
 
   const playSound = useCallback((type: SoundEffectType) => {
     const ctx = getAudioContext();

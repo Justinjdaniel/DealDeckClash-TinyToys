@@ -5,6 +5,40 @@ import { restructureProperties, checkWinCondition, calculateRent } from './rules
 // Simulate a slow asynchronous network API layer for future WebSockets
 export const mockDelay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+// Helper for finding smallest bank card combination covering debt
+function findSmallestCombination(cards: Card[], target: number): Card[] {
+  const totalSum = cards.reduce((sum, c) => sum + c.value, 0);
+  if (totalSum <= target) {
+    return [...cards];
+  }
+
+  let bestSubset: Card[] = [...cards];
+  let bestSum = totalSum;
+
+  function search(index: number, currentSubset: Card[], currentSum: number) {
+    if (currentSum >= target) {
+      if (currentSum < bestSum || (currentSum === bestSum && currentSubset.length < bestSubset.length)) {
+        bestSum = currentSum;
+        bestSubset = [...currentSubset];
+      }
+      return;
+    }
+    if (index >= cards.length) return;
+    if (currentSum >= bestSum) return; // Prune
+
+    // Option 1: Include cards[index]
+    currentSubset.push(cards[index]);
+    search(index + 1, currentSubset, currentSum + cards[index].value);
+    currentSubset.pop();
+
+    // Option 2: Exclude cards[index]
+    search(index + 1, currentSubset, currentSum);
+  }
+
+  search(0, [], 0);
+  return bestSubset;
+}
+
 // Action dispatcher system that serves as our pure state transition engine
 export const dispatchAction = (state: GameState, action: GameAction): GameState => {
   const nextState = JSON.parse(JSON.stringify(state)) as GameState;
@@ -68,16 +102,23 @@ export const dispatchAction = (state: GameState, action: GameAction): GameState 
 
     case 'PLAY_CARD': {
       const { playerId, cardId, targetZone, options } = action.payload;
+      if (nextState.status !== 'PLAYING' || nextState.actionPointsLeft <= 0) break;
+
+      // Verify playerId matches currently designated active player before spending action points
+      const currentPlayer = nextState.players[nextState.currentPlayerIndex];
+      if (playerId !== currentPlayer.id) break;
+
       const player = nextState.players.find(p => p.id === playerId);
-      if (!player || nextState.status !== 'PLAYING' || nextState.actionPointsLeft <= 0) break;
+      if (!player) break;
 
       const cardIdx = player.hand.findIndex(c => c.id === cardId);
       if (cardIdx === -1) break;
 
       const card = player.hand[cardIdx];
 
-      // Handle targetZone = BANK
+      // Handle targetZone = BANK (allow banking only Money or Action cards)
       if (targetZone === 'bank') {
+        if (card.type !== 'Money' && card.type !== 'Action') break;
         player.hand.splice(cardIdx, 1);
         player.bank.push(card);
         nextState.actionPointsLeft--;
@@ -267,23 +308,37 @@ export const dispatchAction = (state: GameState, action: GameAction): GameState 
       if (!responder) break;
 
       if (useJSN && jsnCardId) {
-        // Find JSN card in hand
+        // Find card in hand
         const jsnIdx = responder.hand.findIndex(c => c.id === jsnCardId);
         if (jsnIdx !== -1) {
           const jsnCard = responder.hand[jsnIdx];
-          responder.hand.splice(jsnIdx, 1);
-          nextState.discardPile.unshift(jsnCard);
 
-          // Add to counterChain
-          rx.counterChain.push({ playerId, cardId: jsnCardId });
-          logMsg(`🛡️ ${responder.name} counterplayed with JUST SAY NO!`);
+          // Validate that the located card is indeed a Just Say No card
+          if (jsnCard.type === 'Action' && (jsnCard as ActionCard).actionType === 'Just Say No') {
+            responder.hand.splice(jsnIdx, 1);
+            nextState.discardPile.unshift(jsnCard);
 
-          // Reverse targets! The original attacker now becomes the target of the reaction JSN (they must choose to play JSN to counter back or accept defeat)
-          rx.targetPlayerId = rx.targetPlayerId === rx.originalActionPlayerId
-            ? nextState.players.find(p => p.id !== rx.originalActionPlayerId)!.id
-            : rx.originalActionPlayerId;
+            // Add to counterChain
+            rx.counterChain.push({ playerId, cardId: jsnCardId });
+            logMsg(`🛡️ ${responder.name} counterplayed with JUST SAY NO!`);
 
-          rx.timerSeconds = 5; // Reset reaction timer
+            // Reverse targets safely without non-null assertion
+            let alternativePlayerId: string | undefined = undefined;
+            if (rx.targetPlayerId === rx.originalActionPlayerId) {
+              const altPlayer = nextState.players.find(p => p.id !== rx.originalActionPlayerId);
+              if (altPlayer) {
+                alternativePlayerId = altPlayer.id;
+              }
+            } else {
+              alternativePlayerId = rx.originalActionPlayerId;
+            }
+
+            if (alternativePlayerId !== undefined) {
+              rx.targetPlayerId = alternativePlayerId;
+            }
+
+            rx.timerSeconds = 5; // Reset reaction timer
+          }
         }
       } else {
         // Declined to play JSN or doesn't have it -> ACCEPT RESOLUTION
@@ -307,33 +362,32 @@ export const dispatchAction = (state: GameState, action: GameAction): GameState 
 
     case 'DISCARD_OVERFLOW': {
       const { playerId, cardIds } = action.payload;
-      const player = nextState.players.find(p => p.id === playerId);
-      if (!player || nextState.status !== 'DISCARDING') break;
+      if (nextState.status !== 'DISCARDING' || nextState.pendingDiscardPlayerId !== playerId) break;
 
-      // Filter and discard
-      const keptHand: Card[] = [];
-      player.hand.forEach(c => {
-        if (cardIds.includes(c.id)) {
-          nextState.discardPile.unshift(c);
-          logMsg(`${player.name} discarded excess card: ${c.name}.`);
-        } else {
-          keptHand.push(c);
+      const player = nextState.players.find(p => p.id === playerId);
+      if (!player) break;
+
+      // Discard matching ids from player's hand
+      cardIds.forEach(id => {
+        const idx = player.hand.findIndex(c => c.id === id);
+        if (idx !== -1) {
+          const removed = player.hand.splice(idx, 1)[0];
+          nextState.discardPile.unshift(removed);
+          logMsg(`${player.name} discarded ${removed.name} to discard pile.`);
         }
       });
-      player.hand = keptHand;
 
       if (player.hand.length <= 7) {
+        logMsg(`${player.name} hand is down to ${player.hand.length} cards.`);
         nextState.status = 'PLAYING';
         nextState.pendingDiscardPlayerId = null;
 
-        // Advance turn properly!
+        // Transitions turn after clean discard down to 7
         nextState.currentPlayerIndex = (nextState.currentPlayerIndex + 1) % nextState.players.length;
         const nextPlayer = nextState.players[nextState.currentPlayerIndex];
 
-        // Draw 2 cards (or 5 if hand empty)
         const drawCount = nextPlayer.hand.length === 0 ? 5 : 2;
         if (nextState.deck.length < drawCount) {
-          // Recycle discard pile
           nextState.deck = shuffleDeck([...nextState.deck, ...nextState.discardPile]);
           nextState.discardPile = [];
         }
@@ -349,6 +403,11 @@ export const dispatchAction = (state: GameState, action: GameAction): GameState 
     case 'END_TURN': {
       const { playerId } = action.payload;
       if (nextState.status !== 'PLAYING') break;
+
+      // Verify designated active player is ending their turn
+      const activePlayer = nextState.players[nextState.currentPlayerIndex];
+      if (playerId !== activePlayer.id) break;
+
       const player = nextState.players.find(p => p.id === playerId);
       if (!player) break;
 
@@ -512,17 +571,22 @@ const transferCash = (from: PlayerState, to: PlayerState, amount: number, state:
   const logs = state.logs;
   let remainingDebt = amount;
 
-  // 1. Pay from bank cash
-  from.bank = [...from.bank].sort((a, b) => b.value - a.value); // Use high value money first
+  // 1. Pay from bank cash (sorting bank cards ascending and selecting the smallest available combination)
+  const sortedBank = [...from.bank].sort((a, b) => a.value - b.value);
+  const chosenToPay = findSmallestCombination(sortedBank, remainingDebt);
+
   const keptBank: Card[] = [];
+  const chosenRemaining = [...chosenToPay];
 
   from.bank.forEach(card => {
-    if (remainingDebt <= 0) {
-      keptBank.push(card);
-    } else {
-      remainingDebt -= card.value;
+    const idx = chosenRemaining.findIndex(c => c.id === card.id);
+    if (idx !== -1) {
+      chosenRemaining.splice(idx, 1);
       to.bank.push(card);
+      remainingDebt -= card.value;
       logs.unshift(`[${new Date().toLocaleTimeString()}] Transfer: ${from.name} pays ${card.value}M from Bank to ${to.name}.`);
+    } else {
+      keptBank.push(card);
     }
   });
   from.bank = keptBank;
@@ -531,19 +595,22 @@ const transferCash = (from: PlayerState, to: PlayerState, amount: number, state:
   if (remainingDebt > 0) {
     const allProps = from.properties.flatMap(set => set.cards);
     const keptProps: (PropertyCard | WildcardCard)[] = [];
+    const forfeitedProps: (PropertyCard | WildcardCard)[] = [];
 
     allProps.forEach(card => {
       if (remainingDebt <= 0) {
         keptProps.push(card);
       } else {
         remainingDebt -= card.value;
-        const toProps = to.properties.flatMap(set => set.cards);
-        toProps.push(card);
-        to.properties = restructureProperties(toProps);
+        forfeitedProps.push(card);
         logs.unshift(`[${new Date().toLocaleTimeString()}] Liquidate: ${from.name} forfeits property ${card.name} (Value: ${card.value}M) to resolve remaining debt.`);
       }
     });
 
+    if (forfeitedProps.length > 0) {
+      const toProps = to.properties.flatMap(set => set.cards);
+      to.properties = restructureProperties([...toProps, ...forfeitedProps]);
+    }
     from.properties = restructureProperties(keptProps);
   }
 

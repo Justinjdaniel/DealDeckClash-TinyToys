@@ -11,8 +11,14 @@
     "allowImportingTsExtensions": true,
     "isolatedModules": true,
     "moduleDetection": "force",
-    "noEmit": true,
     "jsx": "react-jsx",
+
+    /* Composite configurations */
+    "composite": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "declarationDir": "./dist/ts-temp",
+    "tsBuildInfoFile": "./dist/ts-temp/.tsbuildinfo",
 
     /* Linting */
     "strict": true,

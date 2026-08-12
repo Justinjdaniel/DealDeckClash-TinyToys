@@ -17,6 +17,19 @@ interface BoardProps {
 
 export const Board: React.FC<BoardProps> = ({ state, onDispatch, botStyle, playSound }) => {
   const [selectedHandCard, setSelectedHandCard] = useState<Card | null>(null);
+  const [botCommentary, setBotCommentary] = useState<string>('');
+
+  // Stable references for state, dispatch, and sound callbacks to avoid trigger loops
+  const latestStateRef = useRef(state);
+  const onDispatchRef = useRef(onDispatch);
+  const playSoundRef = useRef(playSound);
+  const victoryTriggeredRef = useRef(false);
+
+  useEffect(() => {
+    latestStateRef.current = state;
+    onDispatchRef.current = onDispatch;
+    playSoundRef.current = playSound;
+  }, [state, onDispatch, playSound]);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [targetSelectOpen, setTargetSelectOpen] = useState(false);
   const [targetOptions, setTargetOptions] = useState<{ type: string; options: { label: string; value: string }[]; extra?: { opponentCardId: string } } | null>(null);
@@ -37,65 +50,102 @@ export const Board: React.FC<BoardProps> = ({ state, onDispatch, botStyle, playS
     }
   }, [state.logs]);
 
-  // Trigger celebration on Winner State
+  // Trigger celebration on Winner State (gated with ref so it runs once per match)
   useEffect(() => {
     if (state.status === 'WINNER') {
-      if (state.winnerId === human?.id) {
-        playSound('victoryFanfare');
-        confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
-      } else {
-        playSound('lossMelody');
-      }
-    }
-  }, [state.status, state.winnerId, human?.id, playSound]);
-
-  // Bot play tick
-  useEffect(() => {
-    if (state.status === 'PLAYING' && !isHumanTurn && bot && !state.reactionQueue) {
-      const runBot = async () => {
-        await new Promise(resolve => setTimeout(resolve, 1500)); // AI thinking delay
-        const decision = evaluateBotTurn(state, bot.id, botStyle);
-
-        if (decision.action.type === 'PLAY_CARD') {
-          playSound('cardPlay');
-          onDispatch({
-            type: 'PLAY_CARD',
-            payload: decision.action.payload
-          });
-        } else if (decision.action.type === 'END_TURN') {
-          onDispatch({
-            type: 'END_TURN',
-            payload: { playerId: bot.id }
-          });
-        }
-      };
-      runBot();
-    }
-  }, [state, isHumanTurn, bot, botStyle, onDispatch, playSound]);
-
-  // Reaction resolution when Bot targets player
-  useEffect(() => {
-    if (state.reactionQueue && state.reactionQueue.targetPlayerId === bot?.id) {
-      const autoResolveBotReaction = async () => {
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        // If bot has Just Say No, play it with 50% chance. Otherwise Accept Penalty.
-        const jsn = findJSNInHand(bot);
-        if (jsn && Math.random() > 0.4) {
-          playSound('jsnPlay');
-          onDispatch({
-            type: 'RESPOND_TO_ACTION',
-            payload: { playerId: bot.id, useJSN: true, jsnCardId: jsn.id }
-          });
+      if (!victoryTriggeredRef.current) {
+        victoryTriggeredRef.current = true;
+        if (state.winnerId === human?.id) {
+          playSoundRef.current('victoryFanfare');
+          confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
         } else {
-          onDispatch({
-            type: 'RESPOND_TO_ACTION',
-            payload: { playerId: bot.id, useJSN: false }
-          });
+          playSoundRef.current('lossMelody');
         }
-      };
-      autoResolveBotReaction();
+      }
+    } else {
+      victoryTriggeredRef.current = false;
     }
-  }, [state.reactionQueue, bot, onDispatch, playSound]);
+  }, [state.status, state.winnerId, human?.id]);
+
+  // Bot play tick: cancellable, runs on PLAYING/DISCARDING, forwards overflow
+  const isBotActive = !isHumanTurn && bot;
+  const botTurnKey = isBotActive ? `${state.status}-${state.currentPlayerIndex}-${state.actionPointsLeft}-${state.reactionQueue ? 'rx' : 'norx'}-${state.players[state.currentPlayerIndex].hand.length}` : 'idle';
+
+  useEffect(() => {
+    if (!isBotActive) return;
+    const currentStatus = state.status;
+    if (currentStatus !== 'PLAYING' && currentStatus !== 'DISCARDING') return;
+    if (state.reactionQueue) return;
+
+    let active = true;
+
+    const timer = setTimeout(() => {
+      if (!active) return;
+
+      const currentState = latestStateRef.current;
+      if (!bot) return;
+      const decision = evaluateBotTurn(currentState, bot.id, botStyle);
+
+      if (decision.intentReason) {
+        setBotCommentary(decision.intentReason);
+      }
+
+      if (decision.action.type === 'PLAY_CARD') {
+        playSoundRef.current('cardPlay');
+        onDispatchRef.current({
+          type: 'PLAY_CARD',
+          payload: decision.action.payload
+        });
+      } else if (decision.action.type === 'DISCARD_OVERFLOW') {
+        playSoundRef.current('cardSweep');
+        onDispatchRef.current({
+          type: 'DISCARD_OVERFLOW',
+          payload: decision.action.payload
+        });
+      } else if (decision.action.type === 'END_TURN') {
+        onDispatchRef.current({
+          type: 'END_TURN',
+          payload: decision.action.payload
+        });
+      }
+    }, 1500);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [botTurnKey, botStyle, bot?.id, isBotActive, bot, state.reactionQueue, state.status]);
+
+  // Reaction resolution when Bot targets player: cancellable with exactly 50% chance
+  useEffect(() => {
+    const rx = state.reactionQueue;
+    if (!rx || rx.targetPlayerId !== bot?.id) return;
+
+    let active = true;
+
+    const timer = setTimeout(() => {
+      if (!active) return;
+
+      const jsn = findJSNInHand(bot);
+      if (jsn && Math.random() < 0.5) {
+        playSoundRef.current('jsnPlay');
+        onDispatchRef.current({
+          type: 'RESPOND_TO_ACTION',
+          payload: { playerId: bot.id, useJSN: true, jsnCardId: jsn.id }
+        });
+      } else {
+        onDispatchRef.current({
+          type: 'RESPOND_TO_ACTION',
+          payload: { playerId: bot.id, useJSN: false }
+        });
+      }
+    }, 1500);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [state.reactionQueue, bot]);
 
   if (!human || !bot) return null;
 
@@ -463,13 +513,7 @@ export const Board: React.FC<BoardProps> = ({ state, onDispatch, botStyle, playS
                   <span>Bot Commentary</span>
                 </div>
                 <div className="flex-1 overflow-y-auto text-xs text-gray-300 italic py-1 leading-relaxed scrollbar-none font-medium">
-                  {state.logs.length > 0 ? (
-                    state.logs[0].includes('stole') || state.logs[0].includes('pays') || state.logs[0].includes('stashed') || state.logs[0].includes('bank')
-                      ? state.logs[0]
-                      : "Hmm, let me formulate a perfect winning play against you..."
-                  ) : (
-                    "Welcome to Deal Deck Clash. Place your bets and roll your cards."
-                  )}
+                  {botCommentary || (state.logs.length > 0 ? state.logs[0] : "Welcome to Deal Deck Clash. Place your bets and roll your cards.")}
                 </div>
               </div>
             </div>

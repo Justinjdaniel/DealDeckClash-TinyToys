@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { GameState, GameAction, Card, ActionCard } from './types/game';
 import { BotStyle } from './services/bot';
 import { Menu } from './components/Menu';
 import { Board } from './components/Board';
 import { ReactionModal } from './components/ReactionModal';
 import { dispatchAction } from './services/api';
-import { useFoly, SoundEffectType } from './hooks/useFoly';
+import { useFoly } from './hooks/useFoly';
 import { restructureProperties } from './services/rules';
 
 const initialGameState: GameState = {
@@ -57,11 +57,11 @@ function App() {
     setGameState(prev => dispatchAction(prev, action));
   };
 
-  const handleActionDispatch = (action: GameAction) => {
+  const handleActionDispatch = useCallback((action: GameAction) => {
     setGameState(prev => dispatchAction(prev, action));
-  };
+  }, []);
 
-  const handleReactionRespond = (useJSN: boolean, jsnCardId?: string) => {
+  const handleReactionRespond = useCallback((useJSN: boolean, jsnCardId?: string) => {
     if (useJSN) {
       playSound('jsnPlay');
     }
@@ -69,11 +69,11 @@ function App() {
       type: 'RESPOND_TO_ACTION',
       payload: { playerId: 'human', useJSN, jsnCardId }
     });
-  };
+  }, [handleActionDispatch, playSound]);
 
-  const handleReactionTimeout = () => {
+  const handleReactionTimeout = useCallback(() => {
     handleActionDispatch({ type: 'REACTION_TIMED_OUT' });
-  };
+  }, [handleActionDispatch]);
 
   const humanPlayer = gameState.players.find(p => p.id === 'human');
   const humanJSNCard: Card | null = humanPlayer ? humanPlayer.hand.find(c => c.type === 'Action' && (c as ActionCard).actionType === 'Just Say No') || null : null;
@@ -87,7 +87,7 @@ function App() {
           state={gameState}
           onDispatch={handleActionDispatch}
           botStyle={botStyle}
-          playSound={(type: SoundEffectType) => playSound(type)}
+          playSound={playSound}
         />
       )}
 
@@ -98,7 +98,7 @@ function App() {
           onReact={handleReactionRespond}
           onTimeout={handleReactionTimeout}
           jsnCard={humanJSNCard}
-          playSound={(type: SoundEffectType) => playSound(type)}
+          playSound={playSound}
         />
       )}
     </div>

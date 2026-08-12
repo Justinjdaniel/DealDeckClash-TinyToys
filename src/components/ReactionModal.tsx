@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { ReactionState, Card } from '../types/game';
 import { Shield, XCircle } from 'lucide-react';
 import { SoundEffectType } from '../hooks/useFoly';
@@ -20,26 +20,49 @@ export const ReactionModal: React.FC<ReactionModalProps> = ({
 }) => {
   const [secondsLeft, setSecondsLeft] = useState(5);
 
+  // Store the latest playSound and onTimeout callbacks in refs updated each render
+  const playSoundRef = useRef(playSound);
+  const onTimeoutRef = useRef(onTimeout);
+
+  useEffect(() => {
+    playSoundRef.current = playSound;
+  }, [playSound]);
+
+  useEffect(() => {
+    onTimeoutRef.current = onTimeout;
+  }, [onTimeout]);
+
+  // Stable reaction identifier
+  const reactionId = reaction.actionCard.id;
+
+  // Reset countdown using stable reaction identifier
   useEffect(() => {
     setSecondsLeft(5);
-    playSound('alertBuzz');
-  }, [reaction, playSound]);
+    playSoundRef.current('alertBuzz');
+  }, [reactionId]);
 
+  // Pure interval updater: only decrement secondsLeft and play tick
   useEffect(() => {
     const timer = setInterval(() => {
       setSecondsLeft(prev => {
         if (prev <= 1) {
           clearInterval(timer);
-          onTimeout();
           return 0;
         }
-        playSound('timerTick');
+        playSoundRef.current('timerTick');
         return prev - 1;
       });
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [reaction, onTimeout, playSound]);
+  }, [reactionId]);
+
+  // Separate effect keyed to secondsLeft reaching zero to invoke the latest onTimeout exactly once
+  useEffect(() => {
+    if (secondsLeft === 0) {
+      onTimeoutRef.current();
+    }
+  }, [secondsLeft]);
 
   return (
     <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
