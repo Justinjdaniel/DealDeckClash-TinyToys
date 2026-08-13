@@ -1,17 +1,17 @@
 export type CardColor =
-  | 'Brown'
-  | 'Light Blue'
-  | 'Pink'
-  | 'Orange'
-  | 'Red'
-  | 'Yellow'
-  | 'Green'
-  | 'Dark Blue'
-  | 'Railroad'
-  | 'Utility'
-  | 'Any'; // For multi-colored wildcards
+  | "Brown"
+  | "Light Blue"
+  | "Pink"
+  | "Orange"
+  | "Red"
+  | "Yellow"
+  | "Green"
+  | "Dark Blue"
+  | "Railroad"
+  | "Utility"
+  | "Any"; // For multi-colored wildcards
 
-export type CardType = 'Property' | 'Wildcard' | 'Money' | 'Action' | 'Rent';
+export type CardType = "Property" | "Wildcard" | "Money" | "Action" | "Rent";
 
 export interface BaseCard {
   id: string;
@@ -22,33 +22,33 @@ export interface BaseCard {
 }
 
 export interface PropertyCard extends BaseCard {
-  type: 'Property';
+  type: "Property";
   color: CardColor;
 }
 
 export interface WildcardCard extends BaseCard {
-  type: 'Wildcard';
+  type: "Wildcard";
   colors: CardColor[]; // e.g. ['Dark Blue', 'Green'] or 'Any' (represented as ['Any'])
   currentColor: CardColor | null; // Selected color
 }
 
 export interface MoneyCard extends BaseCard {
-  type: 'Money';
+  type: "Money";
 }
 
 export type ActionCardType =
-  | 'Pass Go'
+  | "Pass Go"
   | "Its My Birthday"
-  | 'Debt Collector'
-  | 'Sly Deal'
-  | 'Forced Deal'
-  | 'Deal Breaker'
-  | 'Just Say No'
-  | 'Rent'
-  | 'Multi-Rent';
+  | "Debt Collector"
+  | "Sly Deal"
+  | "Forced Deal"
+  | "Deal Breaker"
+  | "Just Say No"
+  | "Rent"
+  | "Multi-Rent";
 
 export interface ActionCard extends BaseCard {
-  type: 'Action';
+  type: "Action";
   actionType: ActionCardType;
   rentColors?: CardColor[]; // If Rent or Multi-Rent, these are the colors it applies to
 }
@@ -90,7 +90,7 @@ export interface ReactionState {
 export interface GameState {
   gameId: string;
   roomCode?: string;
-  status: 'LOBBY' | 'PLAYING' | 'WINNER' | 'DISCARDING';
+  status: "LOBBY" | "PLAYING" | "WINNER" | "DISCARDING";
   players: PlayerState[];
   currentPlayerIndex: number;
   deck: Card[];
@@ -104,12 +104,34 @@ export interface GameState {
 }
 
 export type GameAction =
-  | { type: 'START_GAME'; payload: { roomCode?: string; botStyle?: string } }
-  | { type: 'RESET_GAME' }
-  | { type: 'PLAY_CARD'; payload: { playerId: string; cardId: string; targetZone: 'bank' | 'properties' | 'center'; options?: { color?: CardColor; targetCardId?: string; swapCardId?: string; targetColor?: CardColor } } }
-  | { type: 'BANK_CARD'; payload: { playerId: string; cardId: string } }
-  | { type: 'TOGGLE_WILDCARD_COLOR'; payload: { playerId: string; cardId: string; color: CardColor } }
-  | { type: 'RESPOND_TO_ACTION'; payload: { playerId: string; useJSN: boolean; jsnCardId?: string } }
-  | { type: 'REACTION_TIMED_OUT' }
-  | { type: 'DISCARD_OVERFLOW'; payload: { playerId: string; cardIds: string[] } }
-  | { type: 'END_TURN'; payload: { playerId: string } };
+  | { type: "START_GAME"; payload: { roomCode?: string; botStyle?: string } }
+  | { type: "RESET_GAME" }
+  | {
+      type: "PLAY_CARD";
+      payload: {
+        playerId: string;
+        cardId: string;
+        targetZone: "bank" | "properties" | "center";
+        options?: {
+          color?: CardColor;
+          targetCardId?: string;
+          swapCardId?: string;
+          targetColor?: CardColor;
+        };
+      };
+    }
+  | { type: "BANK_CARD"; payload: { playerId: string; cardId: string } }
+  | {
+      type: "TOGGLE_WILDCARD_COLOR";
+      payload: { playerId: string; cardId: string; color: CardColor };
+    }
+  | {
+      type: "RESPOND_TO_ACTION";
+      payload: { playerId: string; useJSN: boolean; jsnCardId?: string };
+    }
+  | { type: "REACTION_TIMED_OUT" }
+  | {
+      type: "DISCARD_OVERFLOW";
+      payload: { playerId: string; cardIds: string[] };
+    }
+  | { type: "END_TURN"; payload: { playerId: string } };

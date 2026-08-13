@@ -5,7 +5,7 @@ import {
   WildcardCard,
   PropertyCard,
   ActionCard,
-} from "../types/game";
+} from "../../types/game";
 import { PROPERTY_SET_REQS } from "./deck";
 
 // Checks if a property set of a specific color is complete

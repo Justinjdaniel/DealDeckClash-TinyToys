@@ -4,7 +4,7 @@ import {
   PropertyCard,
   ActionCard,
   GameAction,
-} from "../types/game";
+} from "../../types/game";
 import { restructureProperties } from "./rules";
 
 export type BotStyle = "Aggressive" | "Defensive" | "Hoarder";

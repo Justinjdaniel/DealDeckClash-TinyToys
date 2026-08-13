@@ -8,7 +8,11 @@
     min-height: 100vh;
     background-color: #0b2b22;
     color: #f3f4f6;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family:
+      "Inter",
+      system-ui,
+      -apple-system,
+      sans-serif;
     overflow-x: hidden;
   }
 }

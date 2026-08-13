@@ -1,33 +1,38 @@
-import { useState, useCallback } from 'react';
-import { GameState, GameAction, Card, ActionCard } from './types/game';
-import { BotStyle } from './services/bot';
-import { Menu } from './components/Menu';
-import { Board } from './components/Board';
-import { ReactionModal } from './components/ReactionModal';
-import { dispatchAction } from './services/api';
-import { useFoly } from './hooks/useFoly';
-import { restructureProperties } from './services/rules';
+import { useState, useCallback } from "react";
+import { GameState, GameAction, Card, ActionCard } from "./types/game";
+import { BotStyle } from "./features/game-engine/bot";
+import { Menu } from "./features/game-engine/Menu";
+import { Board } from "./features/game-engine/Board";
+import { ReactionModal } from "./features/game-engine/ReactionModal";
+import { dispatchAction } from "./features/game-engine/api";
+import { restructureProperties } from "./features/game-engine/rules";
+import { AudioProvider, useGamifiedAudio } from "./features/audio/AudioContext";
+import { useGamification } from "./hooks/useGamification";
+import { StageWrapper } from "./components/layout/StageWrapper";
+import { MobileContainer } from "./components/layout/MobileContainer";
+import { FloatingPoints } from "./components/ui/FloatingPoints";
+import { AchievementPopup } from "./components/ui/AchievementPopup";
 
 const initialGameState: GameState = {
-  gameId: 'local-session',
-  status: 'LOBBY',
+  gameId: "local-session",
+  status: "LOBBY",
   players: [
     {
-      id: 'human',
-      name: 'Boardroom Player',
+      id: "human",
+      name: "Boardroom Player",
       isBot: false,
       hand: [],
       bank: [],
-      properties: restructureProperties([])
+      properties: restructureProperties([]),
     },
     {
-      id: 'bot',
-      name: 'Rich Aunt Bot',
+      id: "bot",
+      name: "Rich Aunt Bot",
       isBot: true,
       hand: [],
       bank: [],
-      properties: restructureProperties([])
-    }
+      properties: restructureProperties([]),
+    },
   ],
   currentPlayerIndex: 0,
   deck: [],
@@ -37,71 +42,117 @@ const initialGameState: GameState = {
   winnerId: null,
   reactionQueue: null,
   pendingDiscardPlayerId: null,
-  logs: []
+  logs: [],
 };
 
-function App() {
+function GameOrchestrator() {
   const [gameState, setGameState] = useState<GameState>(initialGameState);
-  const [botStyle, setBotStyle] = useState<BotStyle>('Aggressive');
-  const { playSound } = useFoly();
+  const [botStyle, setBotStyle] = useState<BotStyle>("Aggressive");
+  const { playSound } = useGamifiedAudio();
+
+  const {
+    xp,
+    level,
+    streak,
+    screenShake,
+    floatingPoints,
+    recentAchievement,
+    gainXP,
+    unlockAchievement,
+    incrementStreak,
+    resetStreak,
+    triggerScreenShake,
+  } = useGamification(playSound);
 
   const handleStartGame = (style: BotStyle, roomCode?: string) => {
     setBotStyle(style);
-    playSound('cardSweep');
+    playSound("cardSweep");
 
     const action: GameAction = {
-      type: 'START_GAME',
-      payload: { roomCode, botStyle: style }
+      type: "START_GAME",
+      payload: { roomCode, botStyle: style },
     };
 
-    setGameState(prev => dispatchAction(prev, action));
+    setGameState((prev) => dispatchAction(prev, action));
   };
 
   const handleActionDispatch = useCallback((action: GameAction) => {
-    setGameState(prev => dispatchAction(prev, action));
+    setGameState((prev) => dispatchAction(prev, action));
   }, []);
 
-  const handleReactionRespond = useCallback((useJSN: boolean, jsnCardId?: string) => {
-    if (useJSN) {
-      playSound('jsnPlay');
-    }
-    handleActionDispatch({
-      type: 'RESPOND_TO_ACTION',
-      payload: { playerId: 'human', useJSN, jsnCardId }
-    });
-  }, [handleActionDispatch, playSound]);
+  const handleReactionRespond = useCallback(
+    (useJSN: boolean, jsnCardId?: string) => {
+      if (useJSN) {
+        playSound("jsnPlay");
+        unlockAchievement("SHIELD_MASTER");
+      }
+      handleActionDispatch({
+        type: "RESPOND_TO_ACTION",
+        payload: { playerId: "human", useJSN, jsnCardId },
+      });
+    },
+    [handleActionDispatch, playSound, unlockAchievement],
+  );
 
   const handleReactionTimeout = useCallback(() => {
-    handleActionDispatch({ type: 'REACTION_TIMED_OUT' });
+    handleActionDispatch({ type: "REACTION_TIMED_OUT" });
   }, [handleActionDispatch]);
 
-  const humanPlayer = gameState.players.find(p => p.id === 'human');
-  const humanJSNCard: Card | null = humanPlayer ? humanPlayer.hand.find(c => c.type === 'Action' && (c as ActionCard).actionType === 'Just Say No') || null : null;
+  const humanPlayer = gameState.players.find((p) => p.id === "human");
+  const humanJSNCard: Card | null = humanPlayer
+    ? humanPlayer.hand.find(
+        (c) =>
+          c.type === "Action" && (c as ActionCard).actionType === "Just Say No",
+      ) || null
+    : null;
 
   return (
-    <div className="relative">
-      {gameState.status === 'LOBBY' ? (
-        <Menu onStartGame={handleStartGame} />
-      ) : (
-        <Board
-          state={gameState}
-          onDispatch={handleActionDispatch}
-          botStyle={botStyle}
-          playSound={playSound}
-        />
-      )}
+    <StageWrapper>
+      <MobileContainer screenShake={screenShake}>
+        {gameState.status === "LOBBY" ? (
+          <Menu onStartGame={handleStartGame} />
+        ) : (
+          <Board
+            state={gameState}
+            onDispatch={handleActionDispatch}
+            botStyle={botStyle}
+            xp={xp}
+            level={level}
+            streak={streak}
+            gainXP={gainXP}
+            unlockAchievement={unlockAchievement}
+            incrementStreak={incrementStreak}
+            resetStreak={resetStreak}
+            triggerScreenShake={triggerScreenShake}
+          />
+        )}
 
-      {/* JSN HIGH-PRIORITY COUNTDOWN REACTION OVERLAY */}
-      {gameState.reactionQueue && gameState.reactionQueue.targetPlayerId === 'human' && (
-        <ReactionModal
-          reaction={gameState.reactionQueue}
-          onReact={handleReactionRespond}
-          onTimeout={handleReactionTimeout}
-          jsnCard={humanJSNCard}
-          playSound={playSound}
-        />
-      )}
-    </div>
+        {/* Reaction counting HUD overlay */}
+        {gameState.reactionQueue &&
+          gameState.reactionQueue.targetPlayerId === "human" && (
+            <ReactionModal
+              reaction={gameState.reactionQueue}
+              onReact={handleReactionRespond}
+              onTimeout={handleReactionTimeout}
+              jsnCard={humanJSNCard}
+            />
+          )}
+
+        {/* Floating flying text overlays */}
+        <FloatingPoints items={floatingPoints} />
+
+        {/* Achievements unlocks chimes */}
+        <AchievementPopup achievement={recentAchievement} />
+      </MobileContainer>
+    </StageWrapper>
+  );
+}
+
+function App() {
+  return (
+    <AudioProvider>
+      <GameOrchestrator />
+    </AudioProvider>
   );
 }
 

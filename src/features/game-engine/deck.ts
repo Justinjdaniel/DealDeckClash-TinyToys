@@ -1,4 +1,4 @@
-import { Card, CardColor } from "../types/game";
+import { Card, CardColor } from "../../types/game";
 
 // Helper to generate UUID-like string
 const uuid = () => Math.random().toString(36).substring(2, 11);

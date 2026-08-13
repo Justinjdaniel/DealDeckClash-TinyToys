@@ -7,7 +7,7 @@ import {
   ActionCard,
   ReactionState,
   PropertyCard,
-} from "../types/game";
+} from "../../types/game";
 import { createDeck, shuffleDeck } from "./deck";
 import {
   restructureProperties,
