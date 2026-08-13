@@ -23,6 +23,7 @@ export const ReactionModal: React.FC<ReactionModalProps> = ({
   // Store the latest playSound and onTimeout callbacks in refs updated each render
   const playSoundRef = useRef(playSound);
   const onTimeoutRef = useRef(onTimeout);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     playSoundRef.current = playSound;
@@ -32,35 +33,38 @@ export const ReactionModal: React.FC<ReactionModalProps> = ({
     onTimeoutRef.current = onTimeout;
   }, [onTimeout]);
 
-  // Stable reaction identifier
-  const reactionId = reaction.actionCard.id;
+  // Stable reaction key (combining actionCard id and counterChain length)
+  const reactionKey = `${reaction.actionCard.id}-${reaction.counterChain.length}`;
 
-  // Reset countdown using stable reaction identifier
+  // Reset countdown using stable reaction key
   useEffect(() => {
     setSecondsLeft(5);
     playSoundRef.current('alertBuzz');
-  }, [reactionId]);
+  }, [reactionKey]);
 
-  // Pure interval updater: only decrement secondsLeft and play tick
+  // pure interval: only decrements secondsLeft
   useEffect(() => {
-    const timer = setInterval(() => {
-      setSecondsLeft(prev => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          return 0;
-        }
-        playSoundRef.current('timerTick');
-        return prev - 1;
-      });
+    intervalRef.current = setInterval(() => {
+      setSecondsLeft(prev => prev - 1);
     }, 1000);
 
-    return () => clearInterval(timer);
-  }, [reactionId]);
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, [reactionKey]);
 
-  // Separate effect keyed to secondsLeft reaching zero to invoke the latest onTimeout exactly once
+  // Separate effect to handle side effects of secondsLeft: ticks, clear interval, timeout
   useEffect(() => {
     if (secondsLeft === 0) {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
       onTimeoutRef.current();
+    } else if (secondsLeft > 0 && secondsLeft < 5) {
+      playSoundRef.current('timerTick');
     }
   }, [secondsLeft]);
 

@@ -17,8 +17,8 @@
     "composite": true,
     "declaration": true,
     "emitDeclarationOnly": true,
-    "declarationDir": "./dist/ts-temp",
-    "tsBuildInfoFile": "./dist/ts-temp/.tsbuildinfo",
+    "declarationDir": "./build-artifacts/ts-temp",
+    "tsBuildInfoFile": "./build-artifacts/ts-temp/.tsbuildinfo",
 
     /* Linting */
     "strict": true,
