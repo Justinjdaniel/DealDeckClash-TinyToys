@@ -6,6 +6,7 @@ import {
   checkWinCondition,
 } from "../rules";
 import { dispatchAction } from "../api";
+import { evaluateBotTurnWithBrain } from "../bot";
 import {
   GameState,
   GameAction,
@@ -392,7 +393,7 @@ describe("Monopoly Deal Game Engine Tests", () => {
 
       const transferredProps = humanFinal.properties.flatMap((s) => s.cards);
       expect(transferredProps.length).toBe(1);
-      expect(transferredProps[0].id).toBe("forfeited-prop"); // Assert transferred property has id "forfeited-prop"
+      expect(transferredProps[0].id).toBe("forfeited-prop");
     });
 
     it("should reject action cards missing required option parameters and leave state unchanged", () => {
@@ -502,6 +503,57 @@ describe("Monopoly Deal Game Engine Tests", () => {
 
       const res = dispatchAction(state, toggleAction);
       expect(res.accepted).toBe(false);
+    });
+
+    it("should simulate 5 complete turns cycling between human and bot seamlessly without hanging", () => {
+      let state = dispatchAction(createInitialState(), {
+        type: "START_GAME",
+        payload: { roomCode: "TEST" },
+      });
+
+      expect(state.status).toBe("PLAYING");
+
+      for (let turn = 0; turn < 10; turn++) {
+        const activePlayer = state.players[state.currentPlayerIndex];
+
+        // Perform actions while points remain
+        while (state.actionPointsLeft > 0 && state.status === "PLAYING") {
+          const decision = evaluateBotTurnWithBrain(
+            state,
+            activePlayer.id,
+            "Aggressive",
+          );
+          if (decision.action.type === "END_TURN") {
+            break;
+          }
+          state = dispatchAction(state, decision.action);
+        }
+
+        // Action points left === 0 or decision was END_TURN -> dispatch END_TURN
+        if (state.status === "PLAYING") {
+          state = dispatchAction(state, {
+            type: "END_TURN",
+            payload: { playerId: activePlayer.id },
+          });
+        }
+
+        // Handle discard if needed
+        if (
+          state.status === "DISCARDING" &&
+          state.pendingDiscardPlayerId === activePlayer.id
+        ) {
+          const decision = evaluateBotTurnWithBrain(
+            state,
+            activePlayer.id,
+            "Aggressive",
+          );
+          state = dispatchAction(state, decision.action);
+        }
+
+        expect(state.status).toBe("PLAYING");
+      }
+
+      expect(state.logs.length).toBeGreaterThan(10);
     });
   });
 });
