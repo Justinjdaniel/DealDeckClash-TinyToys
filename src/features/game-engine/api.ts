@@ -19,53 +19,79 @@ import {
 export const mockDelay = (ms: number) =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
-// Helper for finding smallest bank card combination covering debt
+// Helper for finding smallest bank card combination covering debt using Dynamic Programming
 function findSmallestCombination(cards: Card[], target: number): Card[] {
   const totalSum = cards.reduce((sum, c) => sum + c.value, 0);
   if (totalSum <= target) {
     return [...cards];
   }
 
-  let bestSubset: Card[] = [...cards];
-  let bestSum = totalSum;
+  // dp[s] stores the subset of cards achieving sum s
+  const dp: (Card[] | null)[] = new Array(totalSum + 1).fill(null);
+  dp[0] = [];
 
-  function search(index: number, currentSubset: Card[], currentSum: number) {
-    if (currentSum >= target) {
-      if (
-        currentSum < bestSum ||
-        (currentSum === bestSum && currentSubset.length < bestSubset.length)
-      ) {
-        bestSum = currentSum;
-        bestSubset = [...currentSubset];
+  for (const card of cards) {
+    const val = card.value;
+    for (let s = totalSum; s >= val; s--) {
+      const prev = dp[s - val];
+      if (prev !== null) {
+        const candidate = [...prev, card];
+        const current = dp[s];
+        if (current === null || candidate.length < current.length) {
+          dp[s] = candidate;
+        }
       }
-      return;
     }
-    if (index >= cards.length) return;
-    if (currentSum >= bestSum) return; // Prune
-
-    // Option 1: Include cards[index]
-    currentSubset.push(cards[index]);
-    search(index + 1, currentSubset, currentSum + cards[index].value);
-    currentSubset.pop();
-
-    // Option 2: Exclude cards[index]
-    search(index + 1, currentSubset, currentSum);
   }
 
-  search(0, [], 0);
+  let bestSum = totalSum;
+  let bestSubset = [...cards];
+
+  for (let s = target; s <= totalSum; s++) {
+    const subset = dp[s];
+    if (subset !== null) {
+      if (s < bestSum || (s === bestSum && subset.length < bestSubset.length)) {
+        bestSum = s;
+        bestSubset = subset;
+      }
+    }
+  }
+
   return bestSubset;
 }
+
+// Helper to advance the turn and deal cards
+const advanceTurn = (nextState: GameState, logMsg: (msg: string) => void) => {
+  nextState.currentPlayerIndex =
+    (nextState.currentPlayerIndex + 1) % nextState.players.length;
+  const nextPlayer = nextState.players[nextState.currentPlayerIndex];
+
+  const drawCount = nextPlayer.hand.length === 0 ? 5 : 2;
+  if (nextState.deck.length < drawCount) {
+    nextState.deck = shuffleDeck([...nextState.deck, ...nextState.discardPile]);
+    nextState.discardPile = [];
+  }
+  const drawn = nextState.deck.splice(0, drawCount);
+  nextPlayer.hand.push(...drawn);
+  nextState.actionPointsLeft = 3;
+
+  logMsg(`Turn starts for ${nextPlayer.name}. Draws ${drawCount} cards.`);
+};
 
 // Action dispatcher system that serves as our pure state transition engine
 export const dispatchAction = (
   state: GameState,
   action: GameAction,
-): GameState => {
+): GameState & { accepted?: boolean } => {
   const nextState = JSON.parse(JSON.stringify(state)) as GameState;
   const logs = nextState.logs;
+  let accepted = false;
 
   const logMsg = (msg: string) => {
     logs.unshift(`[${new Date().toLocaleTimeString()}] ${msg}`);
+    if (logs.length > 100) {
+      logs.splice(100);
+    }
   };
 
   switch (action.type) {
@@ -74,7 +100,7 @@ export const dispatchAction = (
       nextState.status = "PLAYING";
       nextState.roomCode = action.payload.roomCode || "LOBBY";
 
-      // Build and shuffle 108 card deck
+      // Build and shuffle 99 card deck
       const freshDeck = shuffleDeck(createDeck());
 
       // Deal 5 cards to each player
@@ -98,6 +124,7 @@ export const dispatchAction = (
       nextState.winnerId = null;
       nextState.reactionQueue = null;
       nextState.pendingDiscardPlayerId = null;
+      accepted = true;
       break;
     }
 
@@ -117,6 +144,7 @@ export const dispatchAction = (
       nextState.winnerId = null;
       nextState.reactionQueue = null;
       nextState.pendingDiscardPlayerId = null;
+      accepted = true;
       break;
     }
 
@@ -144,6 +172,7 @@ export const dispatchAction = (
         player.bank.push(card);
         nextState.actionPointsLeft--;
         logMsg(`${player.name} banked ${card.name} (Value: ${card.value}M).`);
+        accepted = true;
       }
       // Handle targetZone = PROPERTIES
       else if (targetZone === "properties") {
@@ -156,6 +185,7 @@ export const dispatchAction = (
           logMsg(
             `${player.name} added ${card.name} to their ${card.color} properties.`,
           );
+          accepted = true;
         } else if (card.type === "Wildcard") {
           const selectedColor =
             options?.color || (card as WildcardCard).colors[0];
@@ -168,6 +198,7 @@ export const dispatchAction = (
           player.properties = restructureProperties(allProperties);
           nextState.actionPointsLeft--;
           logMsg(`${player.name} played ${card.name} as ${selectedColor}.`);
+          accepted = true;
         }
       }
       // Handle targetZone = CENTER (Action play)
@@ -175,21 +206,41 @@ export const dispatchAction = (
         if (card.type !== "Action") break;
         const actionCard = card as ActionCard;
 
-        // Discard or place in center action pile
+        // Validate required options before committing card consumption or decrementing action points
+        if (actionCard.actionType === "Sly Deal") {
+          if (!options?.targetCardId) break;
+        } else if (actionCard.actionType === "Forced Deal") {
+          if (!options?.targetCardId || !options?.swapCardId) break;
+        } else if (actionCard.actionType === "Deal Breaker") {
+          if (!options?.targetColor) break;
+        } else if (
+          actionCard.actionType === "Rent" ||
+          actionCard.actionType === "Multi-Rent"
+        ) {
+          if (!options?.color) break;
+        }
+
         player.hand.splice(cardIdx, 1);
         nextState.discardPile.unshift(actionCard);
         nextState.actionPointsLeft--;
 
         logMsg(`${player.name} played Action Card: ${actionCard.name}.`);
+        accepted = true;
 
         // Execute actual action mechanics
         if (actionCard.actionType === "Pass Go") {
-          // Immediately draw 2 cards
+          // Immediately draw 2 cards with discard reshuffling guard
+          if (nextState.deck.length < 2) {
+            nextState.deck = shuffleDeck([
+              ...nextState.deck,
+              ...nextState.discardPile,
+            ]);
+            nextState.discardPile = [];
+          }
           const drawn = nextState.deck.splice(0, 2);
           player.hand.push(...drawn);
           logMsg(`${player.name} draws 2 cards from Pass Go.`);
         } else if (actionCard.actionType === "Its My Birthday") {
-          // Birthday: triggers JSN reactions or immediate bank transfer from others
           const target = nextState.players.find((p) => p.id !== playerId);
           if (target) {
             nextState.reactionQueue = {
@@ -274,7 +325,6 @@ export const dispatchAction = (
         ) {
           const selectedColor = options?.color;
           if (selectedColor) {
-            // Calculate rent amount
             const matchingSet = player.properties.find(
               (s) => s.color === selectedColor,
             );
@@ -316,6 +366,12 @@ export const dispatchAction = (
 
     case "TOGGLE_WILDCARD_COLOR": {
       const { playerId, cardId, color } = action.payload;
+
+      // Restrict TOGGLE_WILDCARD_COLOR to active turn and status === "PLAYING"
+      if (nextState.status !== "PLAYING") break;
+      const activePlayer = nextState.players[nextState.currentPlayerIndex];
+      if (playerId !== activePlayer.id) break;
+
       const player = nextState.players.find((p) => p.id === playerId);
       if (!player) break;
 
@@ -332,13 +388,17 @@ export const dispatchAction = (
           logMsg(
             `${player.name} re-assigned wildcard ${wildcard.name} to ${color}.`,
           );
+          accepted = true;
+
+          // Re-evaluate win condition
+          if (checkWinCondition(player)) {
+            nextState.status = "WINNER";
+            nextState.winnerId = player.id;
+            logMsg(
+              `🏆 WINNER! ${player.name} has completed 3 full sets and won!`,
+            );
+          }
         }
-      }
-      // Re-evaluate win condition
-      if (checkWinCondition(player)) {
-        nextState.status = "WINNER";
-        nextState.winnerId = player.id;
-        logMsg(`🏆 WINNER! ${player.name} has completed 3 full sets and won!`);
       }
       break;
     }
@@ -352,12 +412,10 @@ export const dispatchAction = (
       if (!responder) break;
 
       if (useJSN && jsnCardId) {
-        // Find card in hand
         const jsnIdx = responder.hand.findIndex((c) => c.id === jsnCardId);
         if (jsnIdx !== -1) {
           const jsnCard = responder.hand[jsnIdx];
 
-          // Validate that the located card is indeed a Just Say No card
           if (
             jsnCard.type === "Action" &&
             (jsnCard as ActionCard).actionType === "Just Say No"
@@ -365,11 +423,10 @@ export const dispatchAction = (
             responder.hand.splice(jsnIdx, 1);
             nextState.discardPile.unshift(jsnCard);
 
-            // Add to counterChain
             rx.counterChain.push({ playerId, cardId: jsnCardId });
             logMsg(`🛡️ ${responder.name} counterplayed with JUST SAY NO!`);
+            accepted = true;
 
-            // Reverse targets safely without non-null assertion
             let alternativePlayerId: string | undefined = undefined;
             if (rx.targetPlayerId === rx.originalActionPlayerId) {
               const altPlayer = nextState.players.find(
@@ -390,10 +447,10 @@ export const dispatchAction = (
           }
         }
       } else {
-        // Declined to play JSN or doesn't have it -> ACCEPT RESOLUTION
         logMsg(`${responder.name} accepted the action effects / charges.`);
         resolveReaction(nextState, rx);
         nextState.reactionQueue = null;
+        accepted = true;
       }
       break;
     }
@@ -409,6 +466,7 @@ export const dispatchAction = (
         );
         resolveReaction(nextState, rx);
         nextState.reactionQueue = null;
+        accepted = true;
       }
       break;
     }
@@ -424,7 +482,6 @@ export const dispatchAction = (
       const player = nextState.players.find((p) => p.id === playerId);
       if (!player) break;
 
-      // Discard matching ids from player's hand
       cardIds.forEach((id) => {
         const idx = player.hand.findIndex((c) => c.id === id);
         if (idx !== -1) {
@@ -433,30 +490,15 @@ export const dispatchAction = (
           logMsg(`${player.name} discarded ${removed.name} to discard pile.`);
         }
       });
+      accepted = true;
 
       if (player.hand.length <= 7) {
         logMsg(`${player.name} hand is down to ${player.hand.length} cards.`);
         nextState.status = "PLAYING";
         nextState.pendingDiscardPlayerId = null;
 
-        // Transitions turn after clean discard down to 7
-        nextState.currentPlayerIndex =
-          (nextState.currentPlayerIndex + 1) % nextState.players.length;
-        const nextPlayer = nextState.players[nextState.currentPlayerIndex];
-
-        const drawCount = nextPlayer.hand.length === 0 ? 5 : 2;
-        if (nextState.deck.length < drawCount) {
-          nextState.deck = shuffleDeck([
-            ...nextState.deck,
-            ...nextState.discardPile,
-          ]);
-          nextState.discardPile = [];
-        }
-        const drawn = nextState.deck.splice(0, drawCount);
-        nextPlayer.hand.push(...drawn);
-        nextState.actionPointsLeft = 3;
-
-        logMsg(`Turn starts for ${nextPlayer.name}. Draws ${drawCount} cards.`);
+        // Transition turn using advanced turn helper
+        advanceTurn(nextState, logMsg);
       }
       break;
     }
@@ -465,7 +507,6 @@ export const dispatchAction = (
       const { playerId } = action.payload;
       if (nextState.status !== "PLAYING") break;
 
-      // Verify designated active player is ending their turn
       const activePlayer = nextState.players[nextState.currentPlayerIndex];
       if (playerId !== activePlayer.id) break;
 
@@ -473,6 +514,7 @@ export const dispatchAction = (
       if (!player) break;
 
       logMsg(`${player.name} ended their turn.`);
+      accepted = true;
 
       if (player.hand.length > 7) {
         nextState.status = "DISCARDING";
@@ -481,30 +523,14 @@ export const dispatchAction = (
           `⚠️ ${player.name} has ${player.hand.length} cards in hand and must discard down to 7.`,
         );
       } else {
-        // Regular turn transition
-        nextState.currentPlayerIndex =
-          (nextState.currentPlayerIndex + 1) % nextState.players.length;
-        const nextPlayer = nextState.players[nextState.currentPlayerIndex];
-
-        const drawCount = nextPlayer.hand.length === 0 ? 5 : 2;
-        if (nextState.deck.length < drawCount) {
-          nextState.deck = shuffleDeck([
-            ...nextState.deck,
-            ...nextState.discardPile,
-          ]);
-          nextState.discardPile = [];
-        }
-        const drawn = nextState.deck.splice(0, drawCount);
-        nextPlayer.hand.push(...drawn);
-        nextState.actionPointsLeft = 3;
-
-        logMsg(`Turn starts for ${nextPlayer.name}. Draws ${drawCount} cards.`);
+        // Transition turn using advanced turn helper
+        advanceTurn(nextState, logMsg);
       }
       break;
     }
   }
 
-  return nextState;
+  return Object.assign(nextState, { accepted });
 };
 
 // Internal solver to resolve effects when reaction is declined or timers run out
@@ -522,9 +548,6 @@ const resolveReaction = (state: GameState, rx: ReactionState) => {
     logs.unshift(`[${new Date().toLocaleTimeString()}] ${msg}`);
   };
 
-  // Determine if JSN counter chain resolved in favor of Attacker or Target
-  // If chain is odd length (1, 3, etc): JSN blocked the action. Target wins, action fizzles!
-  // If chain is even length (0, 2, etc): Action executes successfully!
   const isBlocked = rx.counterChain.length % 2 !== 0;
 
   if (isBlocked) {
@@ -534,7 +557,6 @@ const resolveReaction = (state: GameState, rx: ReactionState) => {
     return;
   }
 
-  // Action Executes!
   const type = rx.actionCard.actionType;
 
   if (type === "Debt Collector" || type === "Its My Birthday") {
@@ -549,13 +571,11 @@ const resolveReaction = (state: GameState, rx: ReactionState) => {
   } else if (type === "Sly Deal") {
     const targetCardId = rx.actionDetails.targetCardId;
     if (targetCardId) {
-      // Find and extract property card from target properties
       const allProps = target.properties.flatMap((set) => set.cards);
       const cardIdx = allProps.findIndex((c) => c.id === targetCardId);
       if (cardIdx !== -1) {
         const card = allProps[cardIdx];
 
-        // Ensure card does NOT belong to a completed set (Sly Deal rules)
         const currentSet = target.properties.find((set) =>
           set.cards.some((c) => c.id === targetCardId),
         );
@@ -567,7 +587,6 @@ const resolveReaction = (state: GameState, rx: ReactionState) => {
         allProps.splice(cardIdx, 1);
         target.properties = restructureProperties(allProps);
 
-        // Add to attacker
         const attackerProps = attacker.properties.flatMap((set) => set.cards);
         attackerProps.push(card);
         attacker.properties = restructureProperties(attackerProps);
@@ -589,7 +608,6 @@ const resolveReaction = (state: GameState, rx: ReactionState) => {
       const aIdx = attackerProps.findIndex((c) => c.id === swapCardId);
 
       if (tIdx !== -1 && aIdx !== -1) {
-        // Ensure target is not a completed set
         const targetSet = target.properties.find((set) =>
           set.cards.some((c) => c.id === targetCardId),
         );
@@ -623,13 +641,11 @@ const resolveReaction = (state: GameState, rx: ReactionState) => {
       if (targetSet && targetSet.isComplete) {
         const stolenCards = [...targetSet.cards];
 
-        // Remove from target
         const targetProps = target.properties
           .flatMap((set) => set.cards)
           .filter((c) => !stolenCards.some((sc) => sc.id === c.id));
         target.properties = restructureProperties(targetProps);
 
-        // Add to attacker
         const attackerProps = attacker.properties.flatMap((set) => set.cards);
         attackerProps.push(...stolenCards);
         attacker.properties = restructureProperties(attackerProps);
@@ -641,7 +657,6 @@ const resolveReaction = (state: GameState, rx: ReactionState) => {
     }
   }
 
-  // Re-verify win conditions
   if (checkWinCondition(attacker)) {
     state.status = "WINNER";
     state.winnerId = attacker.id;
@@ -649,7 +664,7 @@ const resolveReaction = (state: GameState, rx: ReactionState) => {
   }
 };
 
-// Handle debt collection logic: target player pays with bank cash or properties if cash is insufficient
+// Handle debt collection logic
 const transferCash = (
   from: PlayerState,
   to: PlayerState,
@@ -659,7 +674,6 @@ const transferCash = (
   const logs = state.logs;
   let remainingDebt = amount;
 
-  // 1. Pay from bank cash (sorting bank cards ascending and selecting the smallest available combination)
   const sortedBank = [...from.bank].sort((a, b) => a.value - b.value);
   const chosenToPay = findSmallestCombination(sortedBank, remainingDebt);
 
@@ -681,7 +695,6 @@ const transferCash = (
   });
   from.bank = keptBank;
 
-  // 2. Pay using properties if debt still remains (forced liquidation)
   if (remainingDebt > 0) {
     const allProps = from.properties.flatMap((set) => set.cards);
     const keptProps: (PropertyCard | WildcardCard)[] = [];

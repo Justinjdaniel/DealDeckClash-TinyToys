@@ -19,7 +19,6 @@ import {
   ArrowUp,
   Play,
 } from "lucide-react";
-import { AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
 import { useGamifiedAudio } from "../audio/AudioContext";
 import { PlayingCard } from "../cards/PlayingCard";
@@ -27,7 +26,7 @@ import { XPBar } from "../../components/ui/XPBar";
 
 interface BoardProps {
   state: GameState;
-  onDispatch: (action: GameAction) => void;
+  onDispatch: (action: GameAction) => boolean;
   botStyle: BotStyle;
   xp: number;
   level: number;
@@ -89,14 +88,6 @@ export const Board: React.FC<BoardProps> = ({
   const human = state.players.find((p) => !p.isBot);
   const isHumanTurn = state.players[state.currentPlayerIndex].id === human?.id;
 
-  const logsEndRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (logsEndRef.current) {
-      logsEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [state.logs]);
-
   // Trigger win or lose celebration once
   useEffect(() => {
     if (state.status === "WINNER") {
@@ -115,7 +106,7 @@ export const Board: React.FC<BoardProps> = ({
     }
   }, [state.status, state.winnerId, human?.id, unlockAchievement]);
 
-  // AI bot play logic loop
+  // AI bot play logic loop with sanitized primitive dependencies
   const isBotActive = !isHumanTurn && bot;
   const botTurnKey = isBotActive
     ? `${state.status}-${state.currentPlayerIndex}-${state.actionPointsLeft}-${state.reactionQueue ? "rx" : "norx"}-${state.players[state.currentPlayerIndex].hand.length}`
@@ -164,17 +155,9 @@ export const Board: React.FC<BoardProps> = ({
       active = false;
       clearTimeout(timer);
     };
-  }, [
-    botTurnKey,
-    botStyle,
-    bot?.id,
-    isBotActive,
-    bot,
-    state.reactionQueue,
-    state.status,
-  ]);
+  }, [botTurnKey, botStyle, bot?.id, isBotActive, !!state.reactionQueue]);
 
-  // AI bot reaction resolution
+  // AI bot reaction resolution with sanitized primitive dependencies
   useEffect(() => {
     const rx = state.reactionQueue;
     if (!rx || rx.targetPlayerId !== bot?.id) return;
@@ -203,12 +186,28 @@ export const Board: React.FC<BoardProps> = ({
       active = false;
       clearTimeout(timer);
     };
-  }, [state.reactionQueue, bot]);
+  }, [!!state.reactionQueue, bot?.id]);
+
+  // Completed set effect (replaces timed latestStateRef check)
+  const completedSetsCount = human
+    ? human.properties.filter((s) => s.isComplete).length
+    : 0;
+  useEffect(() => {
+    if (completedSetsCount > 0) {
+      unlockAchievement("SET_COMPLETE");
+    }
+  }, [completedSetsCount, unlockAchievement]);
 
   if (!human || !bot) return null;
 
   const handleHandCardClick = (card: Card) => {
-    if (!isHumanTurn || state.status !== "PLAYING") return;
+    // Gate handleHandCardClick on available action points
+    if (
+      !isHumanTurn ||
+      state.status !== "PLAYING" ||
+      state.actionPointsLeft <= 0
+    )
+      return;
     playSound("click");
     setSelectedHandCard(card);
     setActionMenuOpen(true);
@@ -221,32 +220,33 @@ export const Board: React.FC<BoardProps> = ({
     clientX?: number,
     clientY?: number,
   ) => {
-    onDispatch(action);
-    incrementStreak();
-    gainXP(xpGain, xpReason, clientX, clientY);
-    triggerScreenShake(150);
+    const accepted = onDispatch(action);
+    if (accepted) {
+      incrementStreak();
+      gainXP(xpGain, xpReason, clientX, clientY);
+      triggerScreenShake(150);
+    }
   };
 
   const handlePlayToBank = (e: React.MouseEvent) => {
     if (!selectedHandCard) return;
     playSound("bankCoin");
 
-    executePlayDispatch(
-      {
-        type: "PLAY_CARD",
-        payload: {
-          playerId: human.id,
-          cardId: selectedHandCard.id,
-          targetZone: "bank",
-        },
+    const action: GameAction = {
+      type: "PLAY_CARD",
+      payload: {
+        playerId: human.id,
+        cardId: selectedHandCard.id,
+        targetZone: "bank",
       },
-      100,
-      "Deposited card to bank",
-      e.clientX,
-      e.clientY,
-    );
-
-    unlockAchievement("FIRST_BANK");
+    };
+    const accepted = onDispatch(action);
+    if (accepted) {
+      incrementStreak();
+      gainXP(100, "Deposited card to bank", e.clientX, e.clientY);
+      triggerScreenShake(150);
+      unlockAchievement("FIRST_BANK");
+    }
 
     setSelectedHandCard(null);
     setActionMenuOpen(false);
@@ -271,16 +271,6 @@ export const Board: React.FC<BoardProps> = ({
         e.clientX,
         e.clientY,
       );
-
-      // Check if any set is complete after play
-      setTimeout(() => {
-        const hasComplete = latestStateRef.current.players
-          .find((p) => p.id === human.id)
-          ?.properties.some((s) => s.isComplete);
-        if (hasComplete) {
-          unlockAchievement("SET_COMPLETE");
-        }
-      }, 300);
 
       setSelectedHandCard(null);
       setActionMenuOpen(false);
@@ -825,191 +815,189 @@ export const Board: React.FC<BoardProps> = ({
         </div>
       </div>
 
-      {/* Dynamic Action Menus & selectors */}
-      <AnimatePresence>
-        {actionMenuOpen && selectedHandCard && (
-          <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="max-w-sm w-full glass-panel rounded-2xl p-5 border border-casino-gold/40 shadow-gold-glow animate-[scaleIn_0.15s_ease-out]">
-              <h3 className="text-base font-serif font-black text-white text-center mb-1">
-                {selectedHandCard.name}
-              </h3>
-              <p className="text-[10px] text-gray-400 text-center mb-4 leading-normal">
-                Deploy this asset onto the boardroom field.
-              </p>
+      {/* Dynamic Action Menus & selectors (Rendered conditionally with plain React display handlers) */}
+      {actionMenuOpen && selectedHandCard && (
+        <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="max-w-sm w-full glass-panel rounded-2xl p-5 border border-casino-gold/40 shadow-gold-glow animate-[scaleIn_0.15s_ease-out]">
+            <h3 className="text-base font-serif font-black text-white text-center mb-1">
+              {selectedHandCard.name}
+            </h3>
+            <p className="text-[10px] text-gray-400 text-center mb-4 leading-normal">
+              Deploy this asset onto the boardroom field.
+            </p>
 
-              <div className="space-y-2">
-                {selectedHandCard.type === "Money" && (
+            <div className="space-y-2">
+              {selectedHandCard.type === "Money" && (
+                <button
+                  onClick={(e) => handlePlayToBank(e)}
+                  className="w-full py-2.5 bg-casino-gold text-casino-felt font-bold text-xs rounded-xl flex items-center justify-center gap-1 hover:scale-[1.02] transition-all"
+                >
+                  <Coins className="w-3.5 h-3.5" />
+                  Deposit Cash into Bank
+                </button>
+              )}
+
+              {(selectedHandCard.type === "Property" ||
+                selectedHandCard.type === "Wildcard") && (
+                <button
+                  onClick={(e) => handlePlayToProperties(e)}
+                  className="w-full py-2.5 bg-casino-gold text-casino-felt font-bold text-xs rounded-xl flex items-center justify-center gap-1 hover:scale-[1.02] transition-all"
+                >
+                  <ArrowUp className="w-3.5 h-3.5" />
+                  Build Property Zone
+                </button>
+              )}
+
+              {selectedHandCard.type === "Action" && (
+                <>
+                  <button
+                    onClick={handlePlayAction}
+                    className="w-full py-2.5 bg-casino-gold text-casino-felt font-bold text-xs rounded-xl flex items-center justify-center gap-1 hover:scale-[1.02] transition-all"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    Play Action Card
+                  </button>
                   <button
                     onClick={(e) => handlePlayToBank(e)}
-                    className="w-full py-2.5 bg-casino-gold text-casino-felt font-bold text-xs rounded-xl flex items-center justify-center gap-1 hover:scale-[1.02] transition-all"
+                    className="w-full py-2.5 border border-casino-gold/30 hover:border-casino-gold text-casino-gold font-bold text-xs rounded-xl flex items-center justify-center gap-1 hover:bg-casino-gold/5 transition-all"
                   >
                     <Coins className="w-3.5 h-3.5" />
-                    Deposit Cash into Bank
+                    Deposit Cash face value
                   </button>
-                )}
-
-                {(selectedHandCard.type === "Property" ||
-                  selectedHandCard.type === "Wildcard") && (
-                  <button
-                    onClick={(e) => handlePlayToProperties(e)}
-                    className="w-full py-2.5 bg-casino-gold text-casino-felt font-bold text-xs rounded-xl flex items-center justify-center gap-1 hover:scale-[1.02] transition-all"
-                  >
-                    <ArrowUp className="w-3.5 h-3.5" />
-                    Build Property Zone
-                  </button>
-                )}
-
-                {selectedHandCard.type === "Action" && (
-                  <>
-                    <button
-                      onClick={handlePlayAction}
-                      className="w-full py-2.5 bg-casino-gold text-casino-felt font-bold text-xs rounded-xl flex items-center justify-center gap-1 hover:scale-[1.02] transition-all"
-                    >
-                      <Play className="w-3.5 h-3.5 fill-current" />
-                      Play Action Card
-                    </button>
-                    <button
-                      onClick={(e) => handlePlayToBank(e)}
-                      className="w-full py-2.5 border border-casino-gold/30 hover:border-casino-gold text-casino-gold font-bold text-xs rounded-xl flex items-center justify-center gap-1 hover:bg-casino-gold/5 transition-all"
-                    >
-                      <Coins className="w-3.5 h-3.5" />
-                      Deposit Cash face value
-                    </button>
-                  </>
-                )}
-
-                <button
-                  onClick={() => {
-                    setSelectedHandCard(null);
-                    setActionMenuOpen(false);
-                  }}
-                  className="w-full py-2 border border-white/10 text-gray-400 font-bold text-[10px] rounded-xl"
-                >
-                  Cancel Selection
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Target modal */}
-        {targetSelectOpen && targetOptions && (
-          <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="max-w-sm w-full glass-panel rounded-2xl p-5 border border-casino-gold/40 shadow-gold-glow animate-[scaleIn_0.15s_ease-out]">
-              <h3 className="text-sm font-serif font-black text-white text-center mb-1">
-                SPECIFY TARGET
-              </h3>
-              <p className="text-[9px] text-gray-400 text-center mb-4 leading-normal">
-                Choose opponent cards or sets to execute this attack.
-              </p>
-
-              <div className="space-y-1.5 mb-4 max-h-[160px] overflow-y-auto">
-                {targetOptions.options.map((opt) => (
-                  <button
-                    key={opt.value}
-                    onClick={() => {
-                      playSound("click");
-                      setSelectedTargetOption(opt.value);
-                    }}
-                    className={`w-full text-left p-2.5 rounded-xl border font-bold text-[11px] transition-all flex items-center justify-between ${
-                      selectedTargetOption === opt.value
-                        ? "border-casino-gold bg-casino-gold/15 text-white shadow-gold-glow"
-                        : "border-white/10 bg-black/20 text-gray-300 hover:bg-white/5"
-                    }`}
-                  >
-                    <span>{opt.label}</span>
-                    {selectedTargetOption === opt.value && <span>✓</span>}
-                  </button>
-                ))}
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => {
-                    setSelectedHandCard(null);
-                    setSelectedTargetOption(null);
-                    setTargetOptions(null);
-                    setTargetSelectOpen(false);
-                  }}
-                  className="py-2.5 border border-white/10 text-gray-400 font-bold text-[10px] rounded-xl"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={(e) => handleTargetConfirm(e)}
-                  disabled={!selectedTargetOption}
-                  className="py-2.5 bg-casino-gold text-casino-felt font-bold text-[10px] rounded-xl disabled:opacity-40"
-                >
-                  Confirm Target
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Wildcard custom color assignment */}
-        {wildcardSelectorOpen && activeWildcard && (
-          <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="max-w-sm w-full glass-panel rounded-2xl p-5 border border-casino-gold/40 shadow-gold-glow animate-[scaleIn_0.15s_ease-out]">
-              <h3 className="text-sm font-serif font-black text-white text-center mb-1">
-                WILDCARD TUNING
-              </h3>
-              <p className="text-[9px] text-gray-400 text-center mb-4 leading-normal">
-                Choose the property color set to assign this wildcard to.
-              </p>
-
-              <div className="grid grid-cols-2 gap-1.5 mb-4 max-h-[180px] overflow-y-auto pr-1">
-                {activeWildcard.colors.includes("Any")
-                  ? [
-                      "Brown",
-                      "Light Blue",
-                      "Pink",
-                      "Orange",
-                      "Red",
-                      "Yellow",
-                      "Green",
-                      "Dark Blue",
-                      "Railroad",
-                      "Utility",
-                    ].map((col) => (
-                      <button
-                        key={col}
-                        onClick={(e) =>
-                          handleWildcardColorSelect(col as CardColor, e)
-                        }
-                        className="py-2 rounded-xl border border-white/10 font-bold text-[10px] text-white hover:bg-white/5 text-left pl-3"
-                        style={{
-                          borderLeft: `4px solid ${COLOR_HEX[col as CardColor]}`,
-                        }}
-                      >
-                        {col}
-                      </button>
-                    ))
-                  : activeWildcard.colors.map((col) => (
-                      <button
-                        key={col}
-                        onClick={(e) => handleWildcardColorSelect(col, e)}
-                        className="py-2.5 rounded-xl border border-white/10 font-bold text-[10px] text-white hover:bg-white/5 text-left pl-3"
-                        style={{ borderLeft: `4px solid ${COLOR_HEX[col]}` }}
-                      >
-                        {col}
-                      </button>
-                    ))}
-              </div>
+                </>
+              )}
 
               <button
                 onClick={() => {
-                  setActiveWildcard(null);
-                  setWildcardSelectorOpen(false);
+                  setSelectedHandCard(null);
+                  setActionMenuOpen(false);
                 }}
                 className="w-full py-2 border border-white/10 text-gray-400 font-bold text-[10px] rounded-xl"
               >
-                Cancel
+                Cancel Selection
               </button>
             </div>
           </div>
-        )}
-      </AnimatePresence>
+        </div>
+      )}
+
+      {/* Target modal */}
+      {targetSelectOpen && targetOptions && (
+        <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="max-w-sm w-full glass-panel rounded-2xl p-5 border border-casino-gold/40 shadow-gold-glow animate-[scaleIn_0.15s_ease-out]">
+            <h3 className="text-sm font-serif font-black text-white text-center mb-1">
+              SPECIFY TARGET
+            </h3>
+            <p className="text-[9px] text-gray-400 text-center mb-4 leading-normal">
+              Choose opponent cards or sets to execute this attack.
+            </p>
+
+            <div className="space-y-1.5 mb-4 max-h-[160px] overflow-y-auto">
+              {targetOptions.options.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => {
+                    playSound("click");
+                    setSelectedTargetOption(opt.value);
+                  }}
+                  className={`w-full text-left p-2.5 rounded-xl border font-bold text-[11px] transition-all flex items-center justify-between ${
+                    selectedTargetOption === opt.value
+                      ? "border-casino-gold bg-casino-gold/15 text-white shadow-gold-glow"
+                      : "border-white/10 bg-black/20 text-gray-300 hover:bg-white/5"
+                  }`}
+                >
+                  <span>{opt.label}</span>
+                  {selectedTargetOption === opt.value && <span>✓</span>}
+                </button>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => {
+                  setSelectedHandCard(null);
+                  setSelectedTargetOption(null);
+                  setTargetOptions(null);
+                  setTargetSelectOpen(false);
+                }}
+                className="py-2.5 border border-white/10 text-gray-400 font-bold text-[10px] rounded-xl"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={(e) => handleTargetConfirm(e)}
+                disabled={!selectedTargetOption}
+                className="py-2.5 bg-casino-gold text-casino-felt font-bold text-[10px] rounded-xl disabled:opacity-40"
+              >
+                Confirm Target
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Wildcard custom color assignment */}
+      {wildcardSelectorOpen && activeWildcard && (
+        <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="max-w-sm w-full glass-panel rounded-2xl p-5 border border-casino-gold/40 shadow-gold-glow animate-[scaleIn_0.15s_ease-out]">
+            <h3 className="text-sm font-serif font-black text-white text-center mb-1">
+              WILDCARD TUNING
+            </h3>
+            <p className="text-[9px] text-gray-400 text-center mb-4 leading-normal">
+              Choose the property color set to assign this wildcard to.
+            </p>
+
+            <div className="grid grid-cols-2 gap-1.5 mb-4 max-h-[180px] overflow-y-auto pr-1">
+              {activeWildcard.colors.includes("Any")
+                ? [
+                    "Brown",
+                    "Light Blue",
+                    "Pink",
+                    "Orange",
+                    "Red",
+                    "Yellow",
+                    "Green",
+                    "Dark Blue",
+                    "Railroad",
+                    "Utility",
+                  ].map((col) => (
+                    <button
+                      key={col}
+                      onClick={(e) =>
+                        handleWildcardColorSelect(col as CardColor, e)
+                      }
+                      className="py-2 rounded-xl border border-white/10 font-bold text-[10px] text-white hover:bg-white/5 text-left pl-3"
+                      style={{
+                        borderLeft: `4px solid ${COLOR_HEX[col as CardColor]}`,
+                      }}
+                    >
+                      {col}
+                    </button>
+                  ))
+                : activeWildcard.colors.map((col) => (
+                    <button
+                      key={col}
+                      onClick={(e) => handleWildcardColorSelect(col, e)}
+                      className="py-2.5 rounded-xl border border-white/10 font-bold text-[10px] text-white hover:bg-white/5 text-left pl-3"
+                      style={{ borderLeft: `4px solid ${COLOR_HEX[col]}` }}
+                    >
+                      {col}
+                    </button>
+                  ))}
+            </div>
+
+            <button
+              onClick={() => {
+                setActiveWildcard(null);
+                setWildcardSelectorOpen(false);
+              }}
+              className="w-full py-2 border border-white/10 text-gray-400 font-bold text-[10px] rounded-xl"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

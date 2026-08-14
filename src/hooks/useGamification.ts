@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import confetti from "canvas-confetti";
 import { SoundEffectType } from "../features/audio/AudioContext";
 
@@ -64,7 +64,10 @@ export const useGamification = (
   const [xp, setXp] = useState<number>(() => {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("dcc-xp");
-      return stored ? parseInt(stored) : 0;
+      if (stored) {
+        const parsed = parseInt(stored, 10);
+        return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+      }
     }
     return 0;
   });
@@ -72,7 +75,10 @@ export const useGamification = (
   const [level, setLevel] = useState<number>(() => {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("dcc-level");
-      return stored ? parseInt(stored) : 1;
+      if (stored) {
+        const parsed = parseInt(stored, 10);
+        return Number.isFinite(parsed) ? Math.max(1, parsed) : 1;
+      }
     }
     return 1;
   });
@@ -83,12 +89,20 @@ export const useGamification = (
   const [achievements, setAchievements] = useState<Achievement[]>(() => {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("dcc-achievements");
-      return stored ? JSON.parse(stored) : [];
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) return parsed;
+        } catch {
+          // Fallback on JSON parse error
+        }
+      }
     }
     return [];
   });
   const [recentAchievement, setRecentAchievement] =
     useState<Achievement | null>(null);
+  const floatIdCounterRef = useRef(0);
 
   const triggerScreenShake = useCallback((duration = 500) => {
     setScreenShake(true);
@@ -99,10 +113,10 @@ export const useGamification = (
 
   const spawnFloatingText = useCallback(
     (text: string, x = window.innerWidth / 2, y = window.innerHeight / 2) => {
-      const id = Math.random().toString(36).substr(2, 9);
-      setFloatingPoints((prev) => [...prev, { id, text, x, y }]);
+      const uniqueId = `float-${Date.now()}-${floatIdCounterRef.current++}`;
+      setFloatingPoints((prev) => [...prev, { id: uniqueId, text, x, y }]);
       setTimeout(() => {
-        setFloatingPoints((prev) => prev.filter((fp) => fp.id !== id));
+        setFloatingPoints((prev) => prev.filter((fp) => fp.id !== uniqueId));
       }, 1200);
     },
     [],
@@ -110,82 +124,78 @@ export const useGamification = (
 
   const gainXP = useCallback(
     (amount: number, _reason?: string, x?: number, y?: number) => {
-      setXp((prevXp) => {
-        let newXp = prevXp + amount;
-        const xpToLevelUp = level * 1000;
+      spawnFloatingText(`+${amount} XP`, x, y);
 
-        spawnFloatingText(`+${amount} XP`, x, y);
+      const newXpTotal = xp + amount;
+      const xpToLevelUp = level * 1000;
 
-        if (newXp >= xpToLevelUp) {
-          newXp = newXp - xpToLevelUp;
-          setLevel((prevLevel) => {
-            const nextLvl = prevLevel + 1;
-            localStorage.setItem("dcc-level", nextLvl.toString());
-            setTimeout(() => {
-              playSound("levelUp");
-              confetti({ particleCount: 150, spread: 80, origin: { y: 0.3 } });
-              triggerScreenShake(800);
-              spawnFloatingText(
-                `LEVEL UP: ${nextLvl}! 🌟`,
-                window.innerWidth / 2,
-                window.innerHeight / 3,
-              );
-            }, 100);
-            return nextLvl;
-          });
-        }
+      if (newXpTotal >= xpToLevelUp) {
+        const remainingXp = newXpTotal - xpToLevelUp;
+        const nextLevel = level + 1;
 
-        localStorage.setItem("dcc-xp", newXp.toString());
-        return newXp;
-      });
+        setXp(remainingXp);
+        localStorage.setItem("dcc-xp", remainingXp.toString());
+
+        setLevel(nextLevel);
+        localStorage.setItem("dcc-level", nextLevel.toString());
+
+        playSound("levelUp");
+        confetti({ particleCount: 150, spread: 80, origin: { y: 0.3 } });
+        triggerScreenShake(800);
+        spawnFloatingText(
+          `LEVEL UP: ${nextLevel}! 🌟`,
+          window.innerWidth / 2,
+          window.innerHeight / 3,
+        );
+      } else {
+        setXp(newXpTotal);
+        localStorage.setItem("dcc-xp", newXpTotal.toString());
+      }
     },
-    [level, spawnFloatingText, playSound, triggerScreenShake],
+    [xp, level, spawnFloatingText, playSound, triggerScreenShake],
   );
 
   const unlockAchievement = useCallback(
     (key: MilestoneKey) => {
       const milestone = MILESTONES[key];
-      setAchievements((prev) => {
-        if (prev.some((a) => a.id === milestone.id)) return prev; // Already unlocked
+      const alreadyUnlocked = achievements.some((a) => a.id === milestone.id);
+      if (alreadyUnlocked) return;
 
-        const newAchievement: Achievement = {
-          ...milestone,
-          unlockedAt: new Date().toLocaleTimeString(),
-        };
+      const newAchievement: Achievement = {
+        ...milestone,
+        unlockedAt: new Date().toLocaleTimeString(),
+      };
 
-        const updated = [...prev, newAchievement];
-        localStorage.setItem("dcc-achievements", JSON.stringify(updated));
+      const updated = [...achievements, newAchievement];
+      setAchievements(updated);
+      localStorage.setItem("dcc-achievements", JSON.stringify(updated));
 
-        // Display achievement announcement popup
-        setRecentAchievement(newAchievement);
-        setTimeout(() => {
-          setRecentAchievement(null);
-        }, 5000);
+      // Display achievement announcement popup
+      setRecentAchievement(newAchievement);
+      setTimeout(() => {
+        setRecentAchievement(null);
+      }, 5000);
 
-        // Award XP
-        setTimeout(() => {
-          gainXP(milestone.xpReward, `Unlocked milestone: ${milestone.title}`);
-          playSound("victoryFanfare");
-        }, 200);
-
-        return updated;
-      });
+      // Award XP
+      setTimeout(() => {
+        gainXP(milestone.xpReward, `Unlocked milestone: ${milestone.title}`);
+        playSound("victoryFanfare");
+      }, 200);
     },
-    [gainXP, playSound],
+    [achievements, gainXP, playSound],
   );
 
   const incrementStreak = useCallback(() => {
-    setStreak((prev) => {
-      const next = prev + 1;
-      if (next > 1) {
-        // Trigger a pitch-shifted combo chime
-        playSound("combo", next);
-        spawnFloatingText(`COMBO x${next}! 🔥`);
-        triggerScreenShake(200);
-      }
-      return next;
-    });
-  }, [playSound, spawnFloatingText, triggerScreenShake]);
+    const nextStreak = streak + 1;
+    setStreak(nextStreak);
+
+    if (nextStreak > 1) {
+      // Trigger a pitch-shifted combo chime
+      playSound("combo", nextStreak);
+      spawnFloatingText(`COMBO x${nextStreak}! 🔥`);
+      triggerScreenShake(200);
+    }
+  }, [streak, playSound, spawnFloatingText, triggerScreenShake]);
 
   const resetStreak = useCallback(() => {
     setStreak(0);

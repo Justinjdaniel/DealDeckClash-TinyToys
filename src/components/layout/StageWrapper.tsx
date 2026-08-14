@@ -88,7 +88,10 @@ export const StageWrapper: React.FC<StageWrapperProps> = ({ children }) => {
             {/* Volume sliders */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-gray-300 uppercase tracking-wider">
+                <label
+                  htmlFor="boardroom-volume"
+                  className="text-xs font-bold text-gray-300 uppercase tracking-wider"
+                >
                   Boardroom Audio
                 </label>
                 <button
@@ -106,6 +109,7 @@ export const StageWrapper: React.FC<StageWrapperProps> = ({ children }) => {
 
               <div className="flex items-center gap-3">
                 <input
+                  id="boardroom-volume"
                   type="range"
                   min="0"
                   max="1"

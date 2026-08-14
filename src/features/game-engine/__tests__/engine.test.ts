@@ -6,7 +6,12 @@ import {
   checkWinCondition,
 } from "../rules";
 import { dispatchAction } from "../api";
-import { GameState, GameAction, PropertyCard } from "../../../types/game";
+import {
+  GameState,
+  GameAction,
+  PropertyCard,
+  ActionCard,
+} from "../../../types/game";
 
 describe("Monopoly Deal Game Engine Tests", () => {
   describe("Deck and Properties Restructuring", () => {
@@ -238,7 +243,6 @@ describe("Monopoly Deal Game Engine Tests", () => {
 
     it("should transition turns and draw cards when ending turn", () => {
       const state = createInitialState();
-      // Setup deck with at least 5 cards to draw
       state.deck = [
         {
           id: "d1",
@@ -264,6 +268,126 @@ describe("Monopoly Deal Game Engine Tests", () => {
 
       const bot = nextState.players.find((p) => p.id === "bot");
       expect(bot?.hand.length).toBe(5); // bot drew 5 cards because its hand was empty!
+    });
+
+    it("should handle RESPOND_TO_ACTION with a JSN block and reverse target correctly", () => {
+      const state = createInitialState();
+      const actionCard: ActionCard = {
+        id: "ac-db",
+        name: "Debt Collector",
+        type: "Action",
+        value: 3,
+        actionType: "Debt Collector",
+      };
+      state.reactionQueue = {
+        targetPlayerId: "bot",
+        originalActionPlayerId: "human",
+        actionCard,
+        actionDetails: { amount: 5 },
+        counterChain: [],
+        timerSeconds: 5,
+      };
+      const botPlayer = state.players.find((p) => p.id === "bot")!;
+      const jsnCard: ActionCard = {
+        id: "jsn-card",
+        name: "Just Say No",
+        type: "Action",
+        value: 4,
+        actionType: "Just Say No",
+      };
+      botPlayer.hand = [jsnCard];
+
+      // Bot responds with Just Say No
+      const action: GameAction = {
+        type: "RESPOND_TO_ACTION",
+        payload: { playerId: "bot", useJSN: true, jsnCardId: "jsn-card" },
+      };
+
+      const nextState = dispatchAction(state, action);
+      expect(nextState.reactionQueue).not.toBeNull();
+      expect(nextState.reactionQueue?.targetPlayerId).toBe("human"); // Reversed target back to human
+      expect(nextState.reactionQueue?.counterChain.length).toBe(1); // Counter chain recorded
+      expect(nextState.players.find((p) => p.id === "bot")?.hand.length).toBe(
+        0,
+      ); // JSN consumed
+    });
+
+    it("should handle REACTION_TIMED_OUT resolution leading to direct cash transfer", () => {
+      const state = createInitialState();
+      const actionCard: ActionCard = {
+        id: "ac-imb",
+        name: "It's My Birthday",
+        type: "Action",
+        value: 2,
+        actionType: "Its My Birthday",
+      };
+      state.reactionQueue = {
+        targetPlayerId: "bot",
+        originalActionPlayerId: "human",
+        actionCard,
+        actionDetails: { amount: 2 },
+        counterChain: [],
+        timerSeconds: 5,
+      };
+
+      // Set up bank cash
+      const botPlayer = state.players.find((p) => p.id === "bot")!;
+      botPlayer.bank = [
+        { id: "cash-2m", name: "2M Cash", type: "Money", value: 2 },
+      ];
+
+      const action: GameAction = { type: "REACTION_TIMED_OUT" };
+      const nextState = dispatchAction(state, action);
+
+      expect(nextState.reactionQueue).toBeNull(); // Cleared reaction
+      const botRemaining = nextState.players.find((p) => p.id === "bot")!;
+      const humanRemaining = nextState.players.find((p) => p.id === "human")!;
+      expect(botRemaining.bank.length).toBe(0); // Paid 2M
+      expect(humanRemaining.bank.length).toBe(1); // Human received 2M
+    });
+
+    it("should transfer cash and liquidate properties when cash is insufficient on timed out resolution", () => {
+      const state = createInitialState();
+      const actionCard: ActionCard = {
+        id: "ac-imb",
+        name: "Debt Collector",
+        type: "Action",
+        value: 3,
+        actionType: "Debt Collector",
+      };
+      state.reactionQueue = {
+        targetPlayerId: "bot",
+        originalActionPlayerId: "human",
+        actionCard,
+        actionDetails: { amount: 5 },
+        counterChain: [],
+        timerSeconds: 5,
+      };
+
+      // Set up bot properties & bank cash (Bot has 2M cash, needs to pay 5M, so forfeits property worth 3M+)
+      const botPlayer = state.players.find((p) => p.id === "bot")!;
+      botPlayer.bank = [
+        { id: "cash-2m", name: "2M Cash", type: "Money", value: 2 },
+      ];
+      const prop: PropertyCard = {
+        id: "forfeited-prop",
+        name: "Boardwalk",
+        type: "Property",
+        value: 4,
+        color: "Dark Blue",
+      };
+      botPlayer.properties = restructureProperties([prop]);
+
+      const action: GameAction = { type: "REACTION_TIMED_OUT" };
+      const nextState = dispatchAction(state, action);
+
+      const botFinal = nextState.players.find((p) => p.id === "bot")!;
+      const humanFinal = nextState.players.find((p) => p.id === "human")!;
+
+      expect(botFinal.bank.length).toBe(0); // Paid all cash
+      expect(botFinal.properties.flatMap((s) => s.cards).length).toBe(0); // Forfeited Boardwalk to cover the rest!
+      expect(humanFinal.bank.length).toBe(1); // Received 2M Cash
+      expect(humanFinal.properties.flatMap((s) => s.cards).length).toBe(1); // Received Boardwalk property!
     });
   });
 });

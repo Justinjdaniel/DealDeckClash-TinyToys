@@ -88,6 +88,15 @@ export const evaluateBotTurn = (
         },
         intentReason: getCommentary("discard", toDiscard[0].name),
       };
+    } else {
+      // Always return a DISCARD_OVERFLOW action with an empty cardIds payload when no overflow cards exist
+      return {
+        action: {
+          type: "DISCARD_OVERFLOW",
+          payload: { playerId: botId, cardIds: [] },
+        },
+        intentReason: "Clearing pending discard queue to proceed.",
+      };
     }
   }
 
@@ -262,35 +271,12 @@ export const evaluateBotTurn = (
         };
       }
 
-      // Rent charges
-      if (action.actionType === "Rent" && action.rentColors) {
+      // Rent or Multi-Rent charges merged into a single branch
+      if (
+        (action.actionType === "Rent" || action.actionType === "Multi-Rent") &&
+        action.rentColors
+      ) {
         // Choose colors we have properties in
-        const validRentColors = action.rentColors.filter((col) => {
-          const set = bot.properties.find((s) => s.color === col);
-          return set && set.cards.length > 0;
-        });
-        if (validRentColors.length > 0) {
-          return {
-            action: {
-              type: "PLAY_CARD",
-              payload: {
-                playerId: botId,
-                cardId: card.id,
-                targetZone: "center",
-                options: { color: validRentColors[0] },
-              },
-            },
-            intentReason: getCommentary(
-              "play_rent",
-              card.name,
-              validRentColors[0],
-            ),
-          };
-        }
-      }
-
-      if (action.actionType === "Multi-Rent" && action.rentColors) {
-        // Rent on any color
         const validRentColors = action.rentColors.filter((col) => {
           const set = bot.properties.find((s) => s.color === col);
           return set && set.cards.length > 0;

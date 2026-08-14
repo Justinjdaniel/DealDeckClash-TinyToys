@@ -1,5 +1,5 @@
 import React from "react";
-import { motion } from "framer-motion";
+import { motion, PanInfo } from "framer-motion";
 import { Card } from "../../types/game";
 import { CardShell } from "../../components/svg/CardShell";
 import { useCardPhysics } from "../../hooks/useCardPhysics";
@@ -10,7 +10,7 @@ interface PlayingCardProps {
   isFlipped?: boolean;
   isSelected?: boolean;
   isDraggable?: boolean;
-  onDragEnd?: (event: unknown, info: unknown) => void;
+  onDragEnd?: (event: unknown, info: PanInfo) => void;
   className?: string;
 }
 
@@ -29,7 +29,7 @@ export const PlayingCard: React.FC<PlayingCardProps> = ({
   return (
     <motion.div
       style={{
-        perspective: 1000,
+        transformPerspective: 1000,
         rotateX: isFlipped ? 0 : rotateX,
         rotateY: isFlipped ? 0 : rotateY,
         z: isSelected ? 30 : 0,

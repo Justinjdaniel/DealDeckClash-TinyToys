@@ -5,6 +5,7 @@ import React, {
   useEffect,
   useRef,
   useCallback,
+  useMemo,
 } from "react";
 import { triggerHaptic } from "./HapticManager";
 
@@ -39,7 +40,12 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({
   const [volume, setVolumeState] = useState<number>(() => {
     if (typeof window !== "undefined") {
       const v = localStorage.getItem("dcc-volume");
-      return v ? parseFloat(v) : 0.6;
+      if (v) {
+        const parsed = parseFloat(v);
+        if (Number.isFinite(parsed)) {
+          return Math.max(0, Math.min(1, parsed));
+        }
+      }
     }
     return 0.6;
   });
@@ -54,16 +60,16 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const audioCtxRef = useRef<AudioContext | null>(null);
 
-  const setVolume = (v: number) => {
-    const vol = Math.max(0, Math.min(1, v));
-    setVolumeState(vol);
-    localStorage.setItem("dcc-volume", vol.toString());
-  };
+  const setVolume = useCallback((v: number) => {
+    const parsed = Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0.6;
+    setVolumeState(parsed);
+    localStorage.setItem("dcc-volume", parsed.toString());
+  }, []);
 
-  const setMuted = (m: boolean) => {
+  const setMuted = useCallback((m: boolean) => {
     setMutedState(m);
     localStorage.setItem("dcc-muted", m.toString());
-  };
+  }, []);
 
   const getAudioContext = (): AudioContext | null => {
     if (typeof window === "undefined") return null;
@@ -100,21 +106,26 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const playSound = useCallback(
     (type: SoundEffectType, streakCount = 0) => {
-      if (muted || volume <= 0) return;
+      const sanitizedVolume = Number.isFinite(volume)
+        ? Math.max(0, Math.min(1, volume))
+        : 0.6;
+      if (muted || sanitizedVolume <= 0) return;
       const ctx = getAudioContext();
       if (!ctx) return;
 
       const now = ctx.currentTime;
 
       const masterGain = ctx.createGain();
-      masterGain.gain.setValueAtTime(volume, now);
+      masterGain.gain.setValueAtTime(sanitizedVolume, now);
       masterGain.connect(ctx.destination);
 
       const getPitchVariation = () => 1 + (Math.random() * 0.1 - 0.05);
+      let duration = 0.5;
 
       try {
         switch (type) {
           case "click": {
+            duration = 0.1;
             triggerHaptic("tap");
             const osc = ctx.createOscillator();
             const gain = ctx.createGain();
@@ -134,6 +145,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({
           }
 
           case "cardSweep": {
+            duration = 0.2;
             triggerHaptic("tap");
             const osc = ctx.createOscillator();
             const gain = ctx.createGain();
@@ -155,6 +167,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({
           }
 
           case "cardPlay": {
+            duration = 0.15;
             triggerHaptic("tap");
             const osc = ctx.createOscillator();
             const gain = ctx.createGain();
@@ -176,6 +189,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({
           }
 
           case "bankCoin": {
+            duration = 0.4;
             triggerHaptic("success");
             const playCoinTone = (timeOffset: number, pitch: number) => {
               const osc = ctx.createOscillator();
@@ -203,6 +217,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({
           }
 
           case "jsnPlay": {
+            duration = 0.4;
             triggerHaptic("success");
             const osc = ctx.createOscillator();
             const gain = ctx.createGain();
@@ -229,6 +244,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({
           }
 
           case "alertBuzz": {
+            duration = 0.3;
             triggerHaptic("error");
             const osc1 = ctx.createOscillator();
             const osc2 = ctx.createOscillator();
@@ -256,6 +272,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({
           }
 
           case "timerTick": {
+            duration = 0.1;
             const osc = ctx.createOscillator();
             const gain = ctx.createGain();
 
@@ -274,6 +291,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({
           }
 
           case "combo": {
+            duration = 0.3;
             triggerHaptic("success");
             const baseFreq = 523.25; // C5
             const pitchFactor = 1 + streakCount * 0.15;
@@ -300,6 +318,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({
           }
 
           case "levelUp": {
+            duration = 1.0;
             triggerHaptic("success");
             const playNote = (pitch: number, start: number, length: number) => {
               const osc = ctx.createOscillator();
@@ -336,6 +355,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({
           }
 
           case "victoryFanfare": {
+            duration = 1.5;
             triggerHaptic("success");
             const notes = [
               261.63, 329.63, 392.0, 523.25, 659.25, 783.99, 1046.5,
@@ -366,6 +386,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({
           }
 
           case "lossMelody": {
+            duration = 1.8;
             triggerHaptic("error");
             const notes = [392.0, 370.0, 349.23, 293.66];
             const noteDur = 0.22;
@@ -399,14 +420,35 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({
       } catch (e) {
         console.warn("Foly audio generation error:", e);
       }
+
+      // Schedule masterGain disconnect
+      setTimeout(
+        () => {
+          try {
+            masterGain.disconnect();
+          } catch {
+            // Safe disconnect
+          }
+        },
+        duration * 1000 + 100,
+      );
     },
     [volume, muted],
   );
 
+  const contextValue = useMemo(
+    () => ({
+      volume,
+      muted,
+      setVolume,
+      setMuted,
+      playSound,
+    }),
+    [volume, muted, setVolume, setMuted, playSound],
+  );
+
   return (
-    <AudioContextState.Provider
-      value={{ volume, muted, setVolume, setMuted, playSound }}
-    >
+    <AudioContextState.Provider value={contextValue}>
       {children}
     </AudioContextState.Provider>
   );

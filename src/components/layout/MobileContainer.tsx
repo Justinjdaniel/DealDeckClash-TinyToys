@@ -15,7 +15,6 @@ export const MobileContainer: React.FC<MobileContainerProps> = ({
         screenShake ? "animate-shake" : ""
       }`}
       style={{
-        height: "100dvh",
         minHeight: "-webkit-fill-available",
       }}
     >

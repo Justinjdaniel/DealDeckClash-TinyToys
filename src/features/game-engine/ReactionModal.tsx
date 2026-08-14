@@ -17,7 +17,7 @@ export const ReactionModal: React.FC<ReactionModalProps> = ({
   jsnCard,
 }) => {
   const { playSound } = useGamifiedAudio();
-  const [secondsLeft, setSecondsLeft] = useState(5);
+  const [secondsLeft, setSecondsLeft] = useState(reaction.timerSeconds);
 
   const playSoundRef = useRef(playSound);
   const onTimeoutRef = useRef(onTimeout);
@@ -34,13 +34,13 @@ export const ReactionModal: React.FC<ReactionModalProps> = ({
   const reactionKey = `${reaction.actionCard.id}-${reaction.counterChain.length}`;
 
   useEffect(() => {
-    setSecondsLeft(5);
+    setSecondsLeft(reaction.timerSeconds);
     playSoundRef.current("alertBuzz");
-  }, [reactionKey]);
+  }, [reactionKey, reaction.timerSeconds]);
 
   useEffect(() => {
     intervalRef.current = setInterval(() => {
-      setSecondsLeft((prev) => prev - 1);
+      setSecondsLeft((prev) => Math.max(0, prev - 1));
     }, 1000);
 
     return () => {
@@ -57,10 +57,10 @@ export const ReactionModal: React.FC<ReactionModalProps> = ({
         intervalRef.current = null;
       }
       onTimeoutRef.current();
-    } else if (secondsLeft > 0 && secondsLeft < 5) {
+    } else if (secondsLeft > 0 && secondsLeft < reaction.timerSeconds) {
       playSoundRef.current("timerTick");
     }
-  }, [secondsLeft]);
+  }, [secondsLeft, reaction.timerSeconds]);
 
   return (
     <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
@@ -84,7 +84,9 @@ export const ReactionModal: React.FC<ReactionModalProps> = ({
               strokeWidth="3"
               fill="transparent"
               strokeDasharray="138.16"
-              strokeDashoffset={138.16 - (secondsLeft / 5) * 138.16}
+              strokeDashoffset={
+                138.16 - (secondsLeft / reaction.timerSeconds) * 138.16
+              }
               strokeLinecap="round"
               className="transition-all duration-1000 ease-linear"
             />

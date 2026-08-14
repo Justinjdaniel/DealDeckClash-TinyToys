@@ -84,7 +84,7 @@ export const CardShell: React.FC<CardShellProps> = ({
           </pattern>
 
           <filter
-            id="cardBackShadow"
+            id={`cardBackShadow-${cardIdSafe}`}
             x="-10%"
             y="-10%"
             width="130%"
@@ -110,7 +110,7 @@ export const CardShell: React.FC<CardShellProps> = ({
           fill={`url(#cardBackBg-${cardIdSafe})`}
           stroke={`url(#backGoldGrad-${cardIdSafe})`}
           strokeWidth="3"
-          filter="url(#cardBackShadow)"
+          filter={`url(#cardBackShadow-${cardIdSafe})`}
         />
 
         {/* Intricate Pattern Overlay */}
@@ -391,7 +391,7 @@ export const CardShell: React.FC<CardShellProps> = ({
           y="3"
           fontFamily="Impact, Arial Black, sans-serif"
           fontSize="11"
-          fontWeight="extrabold"
+          fontWeight="900"
           fill="#dfb76c"
           textAnchor="middle"
         >
@@ -463,7 +463,7 @@ export const CardShell: React.FC<CardShellProps> = ({
               cx="0"
               cy="0"
               r="30"
-              fill="url(#cardInnerBg)"
+              fill={`url(#cardInnerBg-${cardIdSafe})`}
               stroke="#dfb76c"
               strokeWidth="2.5"
             />
@@ -481,7 +481,7 @@ export const CardShell: React.FC<CardShellProps> = ({
               y="10"
               fontFamily="Impact, Helvetica, sans-serif"
               fontSize="32"
-              fontWeight="black"
+              fontWeight="900"
               fill="#dfb76c"
               textAnchor="middle"
             >
@@ -578,7 +578,7 @@ export const CardShell: React.FC<CardShellProps> = ({
               y="4"
               fontFamily="Impact, sans-serif"
               fontSize="13"
-              fontWeight="bold"
+              fontWeight="900"
               fill="#ffffff"
               textAnchor="middle"
             >
@@ -677,7 +677,7 @@ export const CardShell: React.FC<CardShellProps> = ({
                   y="3.5"
                   fontFamily="sans-serif"
                   fontSize="10"
-                  fontWeight="black"
+                  fontWeight="900"
                   fill="#0f0f17"
                   textAnchor="middle"
                 >

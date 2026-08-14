@@ -22,9 +22,9 @@ export const Menu: React.FC<MenuProps> = ({ onStartGame }) => {
   const [selectedStyle, setSelectedStyle] = useState<BotStyle>("Aggressive");
   const [roomCode, setRoomCode] = useState("");
   const [isMultiplayer, setIsMultiplayer] = useState(false);
-  const [multiplayerMode, setMultiplayerMode] = useState<
-    "lobby" | "joining" | "room"
-  >("lobby");
+  const [multiplayerMode, setMultiplayerMode] = useState<"lobby" | "room">(
+    "lobby",
+  );
 
   const botStyles: { name: BotStyle; desc: string; icon: LucideIcon }[] = [
     {
@@ -227,7 +227,7 @@ export const Menu: React.FC<MenuProps> = ({ onStartGame }) => {
                 <div className="grid grid-cols-2 gap-2 pt-2">
                   <button
                     onClick={handleJoinRoom}
-                    disabled={!roomCode}
+                    disabled={!roomCode.trim()}
                     className="py-2.5 bg-casino-gold text-casino-felt font-bold text-xs rounded-xl disabled:opacity-40"
                   >
                     Join Room

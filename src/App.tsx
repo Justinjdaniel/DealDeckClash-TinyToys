@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useReducer } from "react";
 import { GameState, GameAction, Card, ActionCard } from "./types/game";
 import { BotStyle } from "./features/game-engine/bot";
 import { Menu } from "./features/game-engine/Menu";
@@ -46,7 +46,7 @@ const initialGameState: GameState = {
 };
 
 function GameOrchestrator() {
-  const [gameState, setGameState] = useState<GameState>(initialGameState);
+  const [gameState, dispatch] = useReducer(dispatchAction, initialGameState);
   const [botStyle, setBotStyle] = useState<BotStyle>("Aggressive");
   const { playSound } = useGamifiedAudio();
 
@@ -73,12 +73,20 @@ function GameOrchestrator() {
       payload: { roomCode, botStyle: style },
     };
 
-    setGameState((prev) => dispatchAction(prev, action));
+    dispatch(action);
   };
 
-  const handleActionDispatch = useCallback((action: GameAction) => {
-    setGameState((prev) => dispatchAction(prev, action));
-  }, []);
+  const handleActionDispatch = useCallback(
+    (action: GameAction): boolean => {
+      const next = dispatchAction(gameState, action);
+      if (next.accepted) {
+        dispatch(action);
+        return true;
+      }
+      return false;
+    },
+    [gameState],
+  );
 
   const handleReactionRespond = useCallback(
     (useJSN: boolean, jsnCardId?: string) => {

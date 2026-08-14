@@ -81,11 +81,13 @@ export const restructureProperties = (
   cards.forEach((card) => {
     if (card.type === "Property") {
       setsMap[(card as PropertyCard).color].push(card);
-    } else if (
-      card.type === "Wildcard" &&
-      (card as WildcardCard).currentColor
-    ) {
-      setsMap[(card as WildcardCard).currentColor!].push(card);
+    } else if (card.type === "Wildcard") {
+      const wild = card as WildcardCard;
+      if (wild.currentColor) {
+        setsMap[wild.currentColor].push(wild);
+      } else {
+        setsMap["Any"].push(wild);
+      }
     }
   });
 
@@ -100,6 +102,7 @@ export const restructureProperties = (
     "Dark Blue",
     "Railroad",
     "Utility",
+    "Any",
   ];
 
   return colors.map((color) => {
