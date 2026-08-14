@@ -166,7 +166,8 @@ export const canDispatch = (state: GameState, action: GameAction): boolean => {
       const rx = state.reactionQueue;
       if (!rx || rx.targetPlayerId !== playerId) return false;
 
-      if (useJSN && jsnCardId) {
+      if (useJSN) {
+        if (!jsnCardId) return false;
         const responder = state.players.find((p) => p.id === playerId);
         if (!responder) return false;
         const jsnCard = responder.hand.find((c) => c.id === jsnCardId);
@@ -541,41 +542,43 @@ export const dispatchAction = (
       const responder = nextState.players.find((p) => p.id === playerId);
       if (!responder) break;
 
-      if (useJSN && jsnCardId) {
+      if (useJSN) {
+        if (!jsnCardId) break;
         const jsnIdx = responder.hand.findIndex((c) => c.id === jsnCardId);
-        if (jsnIdx !== -1) {
-          const jsnCard = responder.hand[jsnIdx];
+        if (jsnIdx === -1) break;
 
-          if (
-            jsnCard.type === "Action" &&
-            (jsnCard as ActionCard).actionType === "Just Say No"
-          ) {
-            responder.hand.splice(jsnIdx, 1);
-            nextState.discardPile.unshift(jsnCard);
-
-            rx.counterChain.push({ playerId, cardId: jsnCardId });
-            logMsg(`🛡️ ${responder.name} counterplayed with JUST SAY NO!`);
-            accepted = true;
-
-            let alternativePlayerId: string | undefined = undefined;
-            if (rx.targetPlayerId === rx.originalActionPlayerId) {
-              const altPlayer = nextState.players.find(
-                (p) => p.id !== rx.originalActionPlayerId,
-              );
-              if (altPlayer) {
-                alternativePlayerId = altPlayer.id;
-              }
-            } else {
-              alternativePlayerId = rx.originalActionPlayerId;
-            }
-
-            if (alternativePlayerId !== undefined) {
-              rx.targetPlayerId = alternativePlayerId;
-            }
-
-            rx.timerSeconds = 5; // Reset reaction timer
-          }
+        const jsnCard = responder.hand[jsnIdx];
+        if (
+          jsnCard.type !== "Action" ||
+          (jsnCard as ActionCard).actionType !== "Just Say No"
+        ) {
+          break;
         }
+
+        responder.hand.splice(jsnIdx, 1);
+        nextState.discardPile.unshift(jsnCard);
+
+        rx.counterChain.push({ playerId, cardId: jsnCardId });
+        logMsg(`🛡️ ${responder.name} counterplayed with JUST SAY NO!`);
+        accepted = true;
+
+        let alternativePlayerId: string | undefined = undefined;
+        if (rx.targetPlayerId === rx.originalActionPlayerId) {
+          const altPlayer = nextState.players.find(
+            (p) => p.id !== rx.originalActionPlayerId,
+          );
+          if (altPlayer) {
+            alternativePlayerId = altPlayer.id;
+          }
+        } else {
+          alternativePlayerId = rx.originalActionPlayerId;
+        }
+
+        if (alternativePlayerId !== undefined) {
+          rx.targetPlayerId = alternativePlayerId;
+        }
+
+        rx.timerSeconds = 5; // Reset reaction timer
       } else {
         logMsg(`${responder.name} accepted the action effects / charges.`);
         resolveReaction(nextState, rx);
