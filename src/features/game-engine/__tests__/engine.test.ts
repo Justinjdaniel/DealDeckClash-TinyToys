@@ -11,6 +11,7 @@ import {
   GameAction,
   PropertyCard,
   ActionCard,
+  WildcardCard,
 } from "../../../types/game";
 
 describe("Monopoly Deal Game Engine Tests", () => {
@@ -198,7 +199,6 @@ describe("Monopoly Deal Game Engine Tests", () => {
       deck: [],
       discardPile: [],
       actionPointsLeft: 3,
-      currentTurnActionsPerformed: 0,
       winnerId: null,
       reactionQueue: null,
       pendingDiscardPlayerId: null,
@@ -219,6 +219,7 @@ describe("Monopoly Deal Game Engine Tests", () => {
       expect(player?.bank[0].id).toBe("cash-5m");
       expect(player?.hand.length).toBe(1);
       expect(nextState.actionPointsLeft).toBe(2);
+      expect(nextState.accepted).toBe(true);
     });
 
     it("should allow playing a property card to properties board", () => {
@@ -239,6 +240,7 @@ describe("Monopoly Deal Game Engine Tests", () => {
       expect(brownSet?.cards.length).toBe(1);
       expect(brownSet?.cards[0].id).toBe("prop-brown-1");
       expect(nextState.actionPointsLeft).toBe(2);
+      expect(nextState.accepted).toBe(true);
     });
 
     it("should transition turns and draw cards when ending turn", () => {
@@ -268,6 +270,7 @@ describe("Monopoly Deal Game Engine Tests", () => {
 
       const bot = nextState.players.find((p) => p.id === "bot");
       expect(bot?.hand.length).toBe(5); // bot drew 5 cards because its hand was empty!
+      expect(nextState.accepted).toBe(true);
     });
 
     it("should handle RESPOND_TO_ACTION with a JSN block and reverse target correctly", () => {
@@ -297,7 +300,6 @@ describe("Monopoly Deal Game Engine Tests", () => {
       };
       botPlayer.hand = [jsnCard];
 
-      // Bot responds with Just Say No
       const action: GameAction = {
         type: "RESPOND_TO_ACTION",
         payload: { playerId: "bot", useJSN: true, jsnCardId: "jsn-card" },
@@ -305,11 +307,12 @@ describe("Monopoly Deal Game Engine Tests", () => {
 
       const nextState = dispatchAction(state, action);
       expect(nextState.reactionQueue).not.toBeNull();
-      expect(nextState.reactionQueue?.targetPlayerId).toBe("human"); // Reversed target back to human
-      expect(nextState.reactionQueue?.counterChain.length).toBe(1); // Counter chain recorded
+      expect(nextState.reactionQueue?.targetPlayerId).toBe("human");
+      expect(nextState.reactionQueue?.counterChain.length).toBe(1);
       expect(nextState.players.find((p) => p.id === "bot")?.hand.length).toBe(
         0,
-      ); // JSN consumed
+      );
+      expect(nextState.accepted).toBe(true);
     });
 
     it("should handle REACTION_TIMED_OUT resolution leading to direct cash transfer", () => {
@@ -330,7 +333,6 @@ describe("Monopoly Deal Game Engine Tests", () => {
         timerSeconds: 5,
       };
 
-      // Set up bank cash
       const botPlayer = state.players.find((p) => p.id === "bot")!;
       botPlayer.bank = [
         { id: "cash-2m", name: "2M Cash", type: "Money", value: 2 },
@@ -339,14 +341,15 @@ describe("Monopoly Deal Game Engine Tests", () => {
       const action: GameAction = { type: "REACTION_TIMED_OUT" };
       const nextState = dispatchAction(state, action);
 
-      expect(nextState.reactionQueue).toBeNull(); // Cleared reaction
+      expect(nextState.reactionQueue).toBeNull();
       const botRemaining = nextState.players.find((p) => p.id === "bot")!;
       const humanRemaining = nextState.players.find((p) => p.id === "human")!;
-      expect(botRemaining.bank.length).toBe(0); // Paid 2M
-      expect(humanRemaining.bank.length).toBe(1); // Human received 2M
+      expect(botRemaining.bank.length).toBe(0);
+      expect(humanRemaining.bank.length).toBe(1);
+      expect(nextState.accepted).toBe(true);
     });
 
-    it("should transfer cash and liquidate properties when cash is insufficient on timed out resolution", () => {
+    it("should transfer cash and liquidate properties with forfeited-prop ID on timed out resolution", () => {
       const state = createInitialState();
       const actionCard: ActionCard = {
         id: "ac-imb",
@@ -364,7 +367,6 @@ describe("Monopoly Deal Game Engine Tests", () => {
         timerSeconds: 5,
       };
 
-      // Set up bot properties & bank cash (Bot has 2M cash, needs to pay 5M, so forfeits property worth 3M+)
       const botPlayer = state.players.find((p) => p.id === "bot")!;
       botPlayer.bank = [
         { id: "cash-2m", name: "2M Cash", type: "Money", value: 2 },
@@ -384,10 +386,122 @@ describe("Monopoly Deal Game Engine Tests", () => {
       const botFinal = nextState.players.find((p) => p.id === "bot")!;
       const humanFinal = nextState.players.find((p) => p.id === "human")!;
 
-      expect(botFinal.bank.length).toBe(0); // Paid all cash
-      expect(botFinal.properties.flatMap((s) => s.cards).length).toBe(0); // Forfeited Boardwalk to cover the rest!
-      expect(humanFinal.bank.length).toBe(1); // Received 2M Cash
-      expect(humanFinal.properties.flatMap((s) => s.cards).length).toBe(1); // Received Boardwalk property!
+      expect(botFinal.bank.length).toBe(0);
+      expect(botFinal.properties.flatMap((s) => s.cards).length).toBe(0);
+      expect(humanFinal.bank.length).toBe(1);
+
+      const transferredProps = humanFinal.properties.flatMap((s) => s.cards);
+      expect(transferredProps.length).toBe(1);
+      expect(transferredProps[0].id).toBe("forfeited-prop"); // Assert transferred property has id "forfeited-prop"
+    });
+
+    it("should reject action cards missing required option parameters and leave state unchanged", () => {
+      const state = createInitialState();
+      const player = state.players.find((p) => p.id === "human")!;
+
+      // Sly Deal without targetCardId
+      const slyCard: ActionCard = {
+        id: "a-sly",
+        name: "Sly Deal",
+        type: "Action",
+        value: 3,
+        actionType: "Sly Deal",
+      };
+      player.hand = [slyCard];
+
+      const slyAction: GameAction = {
+        type: "PLAY_CARD",
+        payload: { playerId: "human", cardId: "a-sly", targetZone: "center" },
+      };
+      const resSly = dispatchAction(state, slyAction);
+      expect(resSly.accepted).toBe(false);
+      expect(resSly.players.find((p) => p.id === "human")?.hand.length).toBe(1);
+      expect(resSly.discardPile.length).toBe(0);
+      expect(resSly.actionPointsLeft).toBe(3);
+
+      // Forced Deal without swapCardId
+      const forcedCard: ActionCard = {
+        id: "a-forced",
+        name: "Forced Deal",
+        type: "Action",
+        value: 3,
+        actionType: "Forced Deal",
+      };
+      player.hand = [forcedCard];
+
+      const forcedAction: GameAction = {
+        type: "PLAY_CARD",
+        payload: {
+          playerId: "human",
+          cardId: "a-forced",
+          targetZone: "center",
+          options: { targetCardId: "target-1" },
+        },
+      };
+      const resForced = dispatchAction(state, forcedAction);
+      expect(resForced.accepted).toBe(false);
+      expect(resForced.actionPointsLeft).toBe(3);
+
+      // Deal Breaker without targetColor
+      const dbCard: ActionCard = {
+        id: "a-db",
+        name: "Deal Breaker",
+        type: "Action",
+        value: 5,
+        actionType: "Deal Breaker",
+      };
+      player.hand = [dbCard];
+
+      const dbAction: GameAction = {
+        type: "PLAY_CARD",
+        payload: { playerId: "human", cardId: "a-db", targetZone: "center" },
+      };
+      const resDB = dispatchAction(state, dbAction);
+      expect(resDB.accepted).toBe(false);
+      expect(resDB.actionPointsLeft).toBe(3);
+
+      // Rent without color
+      const rentCard: ActionCard = {
+        id: "a-rent",
+        name: "Rent",
+        type: "Action",
+        value: 1,
+        actionType: "Rent",
+      };
+      player.hand = [rentCard];
+
+      const rentAction: GameAction = {
+        type: "PLAY_CARD",
+        payload: { playerId: "human", cardId: "a-rent", targetZone: "center" },
+      };
+      const resRent = dispatchAction(state, rentAction);
+      expect(resRent.accepted).toBe(false);
+      expect(resRent.actionPointsLeft).toBe(3);
+    });
+
+    it("should reject TOGGLE_WILDCARD_COLOR outside active turn or non-playing state", () => {
+      const state = createInitialState();
+      const player = state.players.find((p) => p.id === "human")!;
+      const wildcard: WildcardCard = {
+        id: "w-1",
+        name: "Wildcard",
+        type: "Wildcard",
+        value: 1,
+        colors: ["Brown", "Light Blue"],
+        currentColor: "Brown",
+      };
+      player.properties = restructureProperties([wildcard]);
+
+      // Attempt toggle during opponent bot's turn
+      state.currentPlayerIndex = 1;
+
+      const toggleAction: GameAction = {
+        type: "TOGGLE_WILDCARD_COLOR",
+        payload: { playerId: "human", cardId: "w-1", color: "Light Blue" },
+      };
+
+      const res = dispatchAction(state, toggleAction);
+      expect(res.accepted).toBe(false);
     });
   });
 });

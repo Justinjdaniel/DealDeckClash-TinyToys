@@ -124,7 +124,13 @@
   }
 }
 .animate-shake {
-  animation: shake 0.25s ease-in-out infinite;
+  animation: shake 0.25s ease-in-out 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-shake {
+    animation: none !important;
+  }
 }
 
 /* Backface Hiding for Card Flipping */

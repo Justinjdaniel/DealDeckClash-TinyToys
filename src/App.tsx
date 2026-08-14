@@ -4,7 +4,7 @@ import { BotStyle } from "./features/game-engine/bot";
 import { Menu } from "./features/game-engine/Menu";
 import { Board } from "./features/game-engine/Board";
 import { ReactionModal } from "./features/game-engine/ReactionModal";
-import { dispatchAction } from "./features/game-engine/api";
+import { dispatchAction, canDispatch } from "./features/game-engine/api";
 import { restructureProperties } from "./features/game-engine/rules";
 import { AudioProvider, useGamifiedAudio } from "./features/audio/AudioContext";
 import { useGamification } from "./hooks/useGamification";
@@ -78,8 +78,7 @@ function GameOrchestrator() {
 
   const handleActionDispatch = useCallback(
     (action: GameAction): boolean => {
-      const next = dispatchAction(gameState, action);
-      if (next.accepted) {
+      if (canDispatch(gameState, action)) {
         dispatch(action);
         return true;
       }

@@ -78,12 +78,136 @@ const advanceTurn = (nextState: GameState, logMsg: (msg: string) => void) => {
   logMsg(`Turn starts for ${nextPlayer.name}. Draws ${drawCount} cards.`);
 };
 
+// Pure guard helper to check if an action can be legally dispatched
+export const canDispatch = (state: GameState, action: GameAction): boolean => {
+  switch (action.type) {
+    case "START_GAME":
+    case "RESET_GAME":
+      return true;
+
+    case "PLAY_CARD": {
+      const { playerId, cardId, targetZone, options } = action.payload;
+      if (state.status !== "PLAYING" || state.actionPointsLeft <= 0)
+        return false;
+
+      const currentPlayer = state.players[state.currentPlayerIndex];
+      if (playerId !== currentPlayer.id) return false;
+
+      const player = state.players.find((p) => p.id === playerId);
+      if (!player) return false;
+
+      const card = player.hand.find((c) => c.id === cardId);
+      if (!card) return false;
+
+      if (targetZone === "bank") {
+        return card.type === "Money" || card.type === "Action";
+      }
+
+      if (targetZone === "properties") {
+        if (card.type === "Property") return true;
+        if (card.type === "Wildcard") {
+          const wild = card as WildcardCard;
+          const selectedColor = options?.color || wild.colors[0];
+          return (
+            wild.colors.includes(selectedColor) || wild.colors.includes("Any")
+          );
+        }
+        return false;
+      }
+
+      if (targetZone === "center") {
+        if (card.type !== "Action") return false;
+        const actionCard = card as ActionCard;
+
+        if (actionCard.actionType === "Sly Deal") {
+          return !!options?.targetCardId;
+        }
+        if (actionCard.actionType === "Forced Deal") {
+          return !!options?.targetCardId && !!options?.swapCardId;
+        }
+        if (actionCard.actionType === "Deal Breaker") {
+          return !!options?.targetColor;
+        }
+        if (
+          actionCard.actionType === "Rent" ||
+          actionCard.actionType === "Multi-Rent"
+        ) {
+          return !!options?.color;
+        }
+        return true;
+      }
+
+      return false;
+    }
+
+    case "TOGGLE_WILDCARD_COLOR": {
+      const { playerId, cardId, color } = action.payload;
+      if (state.status !== "PLAYING") return false;
+
+      const activePlayer = state.players[state.currentPlayerIndex];
+      if (playerId !== activePlayer.id) return false;
+
+      const player = state.players.find((p) => p.id === playerId);
+      if (!player) return false;
+
+      const allProps = player.properties.flatMap((set) => set.cards);
+      const card = allProps.find((c) => c.id === cardId);
+      if (card && card.type === "Wildcard") {
+        const wildcard = card as WildcardCard;
+        return (
+          wildcard.colors.includes(color) || wildcard.colors.includes("Any")
+        );
+      }
+      return false;
+    }
+
+    case "RESPOND_TO_ACTION": {
+      const { playerId, useJSN, jsnCardId } = action.payload;
+      const rx = state.reactionQueue;
+      if (!rx || rx.targetPlayerId !== playerId) return false;
+
+      if (useJSN && jsnCardId) {
+        const responder = state.players.find((p) => p.id === playerId);
+        if (!responder) return false;
+        const jsnCard = responder.hand.find((c) => c.id === jsnCardId);
+        return (
+          !!jsnCard &&
+          jsnCard.type === "Action" &&
+          (jsnCard as ActionCard).actionType === "Just Say No"
+        );
+      }
+      return true;
+    }
+
+    case "REACTION_TIMED_OUT":
+      return !!state.reactionQueue;
+
+    case "DISCARD_OVERFLOW": {
+      const { playerId } = action.payload;
+      return (
+        state.status === "DISCARDING" &&
+        state.pendingDiscardPlayerId === playerId
+      );
+    }
+
+    case "END_TURN": {
+      const { playerId } = action.payload;
+      if (state.status !== "PLAYING") return false;
+      const activePlayer = state.players[state.currentPlayerIndex];
+      return playerId === activePlayer.id;
+    }
+
+    default:
+      return false;
+  }
+};
+
 // Action dispatcher system that serves as our pure state transition engine
 export const dispatchAction = (
   state: GameState,
   action: GameAction,
 ): GameState & { accepted?: boolean } => {
-  const nextState = JSON.parse(JSON.stringify(state)) as GameState;
+  const nextState = structuredClone(state) as GameState;
   const logs = nextState.logs;
   let accepted = false;
 
@@ -120,7 +244,6 @@ export const dispatchAction = (
       nextState.discardPile = [];
       nextState.currentPlayerIndex = 0;
       nextState.actionPointsLeft = 3;
-      nextState.currentTurnActionsPerformed = 0;
       nextState.winnerId = null;
       nextState.reactionQueue = null;
       nextState.pendingDiscardPlayerId = null;
@@ -140,7 +263,6 @@ export const dispatchAction = (
       nextState.discardPile = [];
       nextState.currentPlayerIndex = 0;
       nextState.actionPointsLeft = 0;
-      nextState.currentTurnActionsPerformed = 0;
       nextState.winnerId = null;
       nextState.reactionQueue = null;
       nextState.pendingDiscardPlayerId = null;
@@ -187,14 +309,19 @@ export const dispatchAction = (
           );
           accepted = true;
         } else if (card.type === "Wildcard") {
-          const selectedColor =
-            options?.color || (card as WildcardCard).colors[0];
+          const wild = card as WildcardCard;
+          const selectedColor = options?.color || wild.colors[0];
+          if (
+            !wild.colors.includes(selectedColor) &&
+            !wild.colors.includes("Any")
+          )
+            break;
+
           player.hand.splice(cardIdx, 1);
-          const wildcard = card as WildcardCard;
-          wildcard.currentColor = selectedColor;
+          wild.currentColor = selectedColor;
 
           const allProperties = player.properties.flatMap((set) => set.cards);
-          allProperties.push(wildcard);
+          allProperties.push(wild);
           player.properties = restructureProperties(allProperties);
           nextState.actionPointsLeft--;
           logMsg(`${player.name} played ${card.name} as ${selectedColor}.`);
@@ -229,13 +356,16 @@ export const dispatchAction = (
 
         // Execute actual action mechanics
         if (actionCard.actionType === "Pass Go") {
-          // Immediately draw 2 cards with discard reshuffling guard
+          // Immediately draw 2 cards with discard reshuffling guard excluding current actionCard
           if (nextState.deck.length < 2) {
+            const eligibleDiscards = nextState.discardPile.filter(
+              (c) => c !== actionCard,
+            );
             nextState.deck = shuffleDeck([
               ...nextState.deck,
-              ...nextState.discardPile,
+              ...eligibleDiscards,
             ]);
-            nextState.discardPile = [];
+            nextState.discardPile = [actionCard];
           }
           const drawn = nextState.deck.splice(0, 2);
           player.hand.push(...drawn);
