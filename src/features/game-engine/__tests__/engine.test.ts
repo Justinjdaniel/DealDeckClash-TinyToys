@@ -1,4 +1,5 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+import { renderHook, act } from "@testing-library/react";
 import { createDeck } from "../deck";
 import {
   restructureProperties,
@@ -7,6 +8,7 @@ import {
 } from "../rules";
 import { dispatchAction } from "../api";
 import { evaluateBotTurnWithBrain } from "../bot";
+import { useBotController } from "../../../hooks/useBotController";
 import {
   GameState,
   GameAction,
@@ -503,6 +505,67 @@ describe("Monopoly Deal Game Engine Tests", () => {
 
       const res = dispatchAction(state, toggleAction);
       expect(res.accepted).toBe(false);
+    });
+
+    it("should auto-dispatch END_TURN when useBotController is mounted during bot turn with 0 action points left", () => {
+      vi.useFakeTimers();
+
+      const state: GameState = {
+        gameId: "test-bot-0-actions",
+        status: "PLAYING",
+        players: [
+          {
+            id: "human",
+            name: "Human",
+            isBot: false,
+            hand: [],
+            bank: [],
+            properties: restructureProperties([]),
+          },
+          {
+            id: "bot",
+            name: "Bot",
+            isBot: true,
+            hand: [],
+            bank: [],
+            properties: restructureProperties([]),
+          },
+        ],
+        currentPlayerIndex: 1, // bot's turn
+        deck: [],
+        discardPile: [],
+        actionPointsLeft: 0, // 0 actions left!
+        currentTurnActionsPerformed: 3,
+        winnerId: null,
+        reactionQueue: null,
+        pendingDiscardPlayerId: null,
+        logs: [],
+      };
+
+      const dispatchedActions: GameAction[] = [];
+      const onDispatch = (action: GameAction) => {
+        dispatchedActions.push(action);
+        return true;
+      };
+
+      renderHook(() =>
+        useBotController({
+          state,
+          onDispatch,
+          botStyle: "Aggressive",
+        }),
+      );
+
+      // Advance timers by 500ms
+      act(() => {
+        vi.advanceTimersByTime(500);
+      });
+
+      expect(dispatchedActions.length).toBeGreaterThan(0);
+      expect(dispatchedActions[0].type).toBe("END_TURN");
+      expect(dispatchedActions[0].payload).toEqual({ playerId: "bot" });
+
+      vi.useRealTimers();
     });
 
     it("should simulate 5 complete turns cycling between human and bot seamlessly without hanging", () => {

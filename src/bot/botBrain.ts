@@ -4,11 +4,15 @@ import {
   PropertyCard,
   WildcardCard,
   ActionCard,
+  CardColor,
+  PropertySet,
 } from "../types/game";
 import {
   restructureProperties,
   calculateRent,
+  HAND_LIMIT,
 } from "../features/game-engine/rules";
+import { PROPERTY_SET_REQS } from "../features/game-engine/deck";
 
 export type BotStyle = "Aggressive" | "Defensive" | "Hoarder";
 
@@ -32,6 +36,10 @@ export interface ModelWeights {
   PROPERTY_NEW: number;
   BANK_SAFETY_NEED: number;
   BANK_SAFETY_NORMAL: number;
+  BANK_ACTION_NEED: number;
+  BANK_ACTION_NORMAL: number;
+  BANK_THRESHOLD: number;
+  JSN_DEFENSE_RATE: number;
   DISCARD_PENALTY: number;
   END_TURN_BASE: number;
 }
@@ -50,6 +58,10 @@ export const TRAINED_BOT_MODELS: Record<BotStyle, ModelWeights> = {
     PROPERTY_NEW: 120,
     BANK_SAFETY_NEED: 150,
     BANK_SAFETY_NORMAL: 80,
+    BANK_ACTION_NEED: 130,
+    BANK_ACTION_NORMAL: 40,
+    BANK_THRESHOLD: 5,
+    JSN_DEFENSE_RATE: 0.8,
     DISCARD_PENALTY: -50,
     END_TURN_BASE: 10,
   },
@@ -66,6 +78,10 @@ export const TRAINED_BOT_MODELS: Record<BotStyle, ModelWeights> = {
     PROPERTY_NEW: 100,
     BANK_SAFETY_NEED: 350,
     BANK_SAFETY_NORMAL: 200,
+    BANK_ACTION_NEED: 330,
+    BANK_ACTION_NORMAL: 160,
+    BANK_THRESHOLD: 5,
+    JSN_DEFENSE_RATE: 0.9,
     DISCARD_PENALTY: -30,
     END_TURN_BASE: 15,
   },
@@ -82,10 +98,85 @@ export const TRAINED_BOT_MODELS: Record<BotStyle, ModelWeights> = {
     PROPERTY_NEW: 140,
     BANK_SAFETY_NEED: 400,
     BANK_SAFETY_NORMAL: 280,
+    BANK_ACTION_NEED: 380,
+    BANK_ACTION_NORMAL: 240,
+    BANK_THRESHOLD: 5,
+    JSN_DEFENSE_RATE: 0.7,
     DISCARD_PENALTY: -20,
     END_TURN_BASE: 12,
   },
 };
+
+// Helper to evaluate property placement weight and explanation
+export const scorePropertyPlacement = (
+  currentCards: (PropertyCard | WildcardCard)[],
+  targetColor: CardColor,
+  cardToPlay: PropertyCard | WildcardCard,
+  completedSetsCount: number,
+  weights: ModelWeights,
+): { weight: number; explanation: string } => {
+  const projectedSets = restructureProperties([...currentCards, cardToPlay]);
+  const matchingSet = projectedSets.find((s) => s.color === targetColor);
+  const setNowComplete = matchingSet?.isComplete;
+
+  if (setNowComplete) {
+    if (completedSetsCount >= 2) {
+      return {
+        weight: weights.WINNING_SET_COMPLETION,
+        explanation: `Completing winning 3rd property set in ${targetColor}!`,
+      };
+    } else {
+      return {
+        weight: weights.SET_COMPLETION,
+        explanation: `Completing ${targetColor} property set!`,
+      };
+    }
+  }
+
+  const existingCount = currentCards.filter((c) => {
+    if (c.type === "Property") return (c as PropertyCard).color === targetColor;
+    if (c.type === "Wildcard")
+      return (c as WildcardCard).currentColor === targetColor;
+    return false;
+  }).length;
+
+  if (existingCount > 0) {
+    return {
+      weight: weights.PROPERTY_MATCH,
+      explanation: `Matching ${cardToPlay.name} to existing ${targetColor} set.`,
+    };
+  }
+
+  return {
+    weight: weights.PROPERTY_NEW,
+    explanation: `Building ${targetColor} property set with ${cardToPlay.name}.`,
+  };
+};
+
+// Rank target opponent property cards for Sly Deal / Forced Deal attacks
+function getRankedOpponentProperties(
+  opponentSets: PropertySet[],
+): { card: PropertyCard | WildcardCard; color: CardColor; score: number }[] {
+  const candidates: {
+    card: PropertyCard | WildcardCard;
+    color: CardColor;
+    score: number;
+  }[] = [];
+
+  for (const set of opponentSets) {
+    if (set.isComplete || set.cards.length === 0) continue;
+    const reqCount = PROPERTY_SET_REQS[set.color]?.count || 3;
+    const closenessScore = set.cards.length / reqCount;
+
+    for (const card of set.cards) {
+      const totalScore = closenessScore * 100 + card.value;
+      candidates.push({ card, color: set.color, score: totalScore });
+    }
+  }
+
+  candidates.sort((a, b) => b.score - a.score);
+  return candidates;
+}
 
 export const evaluateBotTurnWithBrain = (
   state: GameState,
@@ -110,9 +201,9 @@ export const evaluateBotTurnWithBrain = (
 
   // 1. DISCARDING OVERFLOW STATE
   if (state.status === "DISCARDING" && state.pendingDiscardPlayerId === botId) {
-    if (bot.hand.length > 7) {
+    if (bot.hand.length > HAND_LIMIT) {
       const sortedHand = [...bot.hand].sort((a, b) => a.value - b.value);
-      const toDiscard = sortedHand.slice(0, bot.hand.length - 7);
+      const toDiscard = sortedHand.slice(0, bot.hand.length - HAND_LIMIT);
       const discardIds = toDiscard.map((c) => c.id);
       const calculatedWeight = weights.DISCARD_PENALTY * toDiscard.length;
       return {
@@ -120,7 +211,7 @@ export const evaluateBotTurnWithBrain = (
           type: "DISCARD_OVERFLOW",
           payload: { playerId: botId, cardIds: discardIds },
         },
-        intentReason: `Discarding ${toDiscard.map((c) => c.name).join(", ")} to comply with hand size limits.`,
+        intentReason: `Discarding ${toDiscard.map((c) => c.name).join(", ")} to comply with hand size limit.`,
         weight: calculatedWeight,
         tacticalExplanation: `Slimming hand by discarding lower-value cards. (Weight: ${calculatedWeight})`,
       };
@@ -160,6 +251,7 @@ export const evaluateBotTurnWithBrain = (
 
   const completedSetsCount = bot.properties.filter((s) => s.isComplete).length;
   const bankTotal = bot.bank.reduce((sum, c) => sum + c.value, 0);
+  const currentBotProps = bot.properties.flatMap((s) => s.cards);
 
   // Evaluate cards in hand
   for (const card of bot.hand) {
@@ -168,34 +260,14 @@ export const evaluateBotTurnWithBrain = (
       const wildcard = card as WildcardCard;
       for (const col of wildcard.colors) {
         if (col === "Any") continue;
-        const tempProps = bot.properties.flatMap((s) => s.cards);
         const copyWildcard = { ...wildcard, currentColor: col };
-        const evaluatedSets = restructureProperties([
-          ...tempProps,
+        const scored = scorePropertyPlacement(
+          currentBotProps,
+          col,
           copyWildcard,
-        ]);
-        const matchingSet = evaluatedSets.find((s) => s.color === col);
-        const setNowComplete = matchingSet?.isComplete;
-
-        let weight = weights.PROPERTY_NEW;
-        let explanation = `Playing wildcard as ${col}.`;
-
-        if (setNowComplete) {
-          if (completedSetsCount >= 2) {
-            weight = weights.WINNING_SET_COMPLETION;
-            explanation = `Completing winning 3rd property set in ${col}!`;
-          } else {
-            weight = weights.SET_COMPLETION;
-            explanation = `Completing ${col} property set!`;
-          }
-        } else {
-          const existingCount =
-            bot.properties.find((s) => s.color === col)?.cards.length || 0;
-          if (existingCount > 0) {
-            weight = weights.PROPERTY_MATCH;
-            explanation = `Extending ${col} set build.`;
-          }
-        }
+          completedSetsCount,
+          weights,
+        );
 
         candidates.push({
           action: {
@@ -207,9 +279,9 @@ export const evaluateBotTurnWithBrain = (
               options: { color: col },
             },
           },
-          intentReason: explanation,
-          weight,
-          tacticalExplanation: `${explanation} (Weight: +${weight})`,
+          intentReason: scored.explanation,
+          weight: scored.weight,
+          tacticalExplanation: `${scored.explanation} (Weight: +${scored.weight})`,
         });
       }
     }
@@ -217,30 +289,13 @@ export const evaluateBotTurnWithBrain = (
     // B. Standard Property Cards
     if (card.type === "Property") {
       const prop = card as PropertyCard;
-      const tempProps = bot.properties.flatMap((s) => s.cards);
-      const evaluatedSets = restructureProperties([...tempProps, prop]);
-      const matchingSet = evaluatedSets.find((s) => s.color === prop.color);
-      const setNowComplete = matchingSet?.isComplete;
-
-      let weight = weights.PROPERTY_NEW;
-      let explanation = `Building ${prop.color} property set.`;
-
-      if (setNowComplete) {
-        if (completedSetsCount >= 2) {
-          weight = weights.WINNING_SET_COMPLETION;
-          explanation = `Completing winning 3rd set with ${prop.name}!`;
-        } else {
-          weight = weights.SET_COMPLETION;
-          explanation = `Completing ${prop.color} set with ${prop.name}!`;
-        }
-      } else {
-        const existingCount =
-          bot.properties.find((s) => s.color === prop.color)?.cards.length || 0;
-        if (existingCount > 0) {
-          weight = weights.PROPERTY_MATCH;
-          explanation = `Matching ${prop.color} property to existing set.`;
-        }
-      }
+      const scored = scorePropertyPlacement(
+        currentBotProps,
+        prop.color,
+        prop,
+        completedSetsCount,
+        weights,
+      );
 
       candidates.push({
         action: {
@@ -251,9 +306,9 @@ export const evaluateBotTurnWithBrain = (
             targetZone: "properties",
           },
         },
-        intentReason: explanation,
-        weight,
-        tacticalExplanation: `${explanation} (Weight: +${weight})`,
+        intentReason: scored.explanation,
+        weight: scored.weight,
+        tacticalExplanation: `${scored.explanation} (Weight: +${scored.weight})`,
       });
     }
 
@@ -295,11 +350,9 @@ export const evaluateBotTurnWithBrain = (
       }
 
       if (action.actionType === "Sly Deal") {
-        const eligibleSets = player.properties.filter(
-          (s) => !s.isComplete && s.cards.length > 0,
-        );
-        if (eligibleSets.length > 0) {
-          const targetCard = eligibleSets[0].cards[0];
+        const rankedTargets = getRankedOpponentProperties(player.properties);
+        if (rankedTargets.length > 0) {
+          const bestTarget = rankedTargets[0];
           const weight = weights.SLY_DEAL;
           candidates.push({
             action: {
@@ -308,25 +361,23 @@ export const evaluateBotTurnWithBrain = (
                 playerId: botId,
                 cardId: card.id,
                 targetZone: "center",
-                options: { targetCardId: targetCard.id },
+                options: { targetCardId: bestTarget.card.id },
               },
             },
-            intentReason: `Stealing ${targetCard.name} with Sly Deal.`,
+            intentReason: `Stealing ${bestTarget.card.name} with Sly Deal.`,
             weight,
-            tacticalExplanation: `Targeting ${targetCard.name} to weaken opponent board. (Weight: +${weight})`,
+            tacticalExplanation: `Targeting ${bestTarget.card.name} to weaken opponent board. (Weight: +${weight})`,
           });
         }
       }
 
       if (action.actionType === "Forced Deal") {
-        const playerEligibleSets = player.properties.filter(
-          (s) => !s.isComplete && s.cards.length > 0,
-        );
+        const rankedTargets = getRankedOpponentProperties(player.properties);
         const botEligibleSets = bot.properties.filter(
           (s) => !s.isComplete && s.cards.length > 0,
         );
-        if (playerEligibleSets.length > 0 && botEligibleSets.length > 0) {
-          const targetCard = playerEligibleSets[0].cards[0];
+        if (rankedTargets.length > 0 && botEligibleSets.length > 0) {
+          const bestTarget = rankedTargets[0];
           const swapCard = botEligibleSets[0].cards[0];
           const weight = weights.FORCED_DEAL;
           candidates.push({
@@ -337,14 +388,14 @@ export const evaluateBotTurnWithBrain = (
                 cardId: card.id,
                 targetZone: "center",
                 options: {
-                  targetCardId: targetCard.id,
+                  targetCardId: bestTarget.card.id,
                   swapCardId: swapCard.id,
                 },
               },
             },
-            intentReason: `Swapping ${swapCard.name} for ${targetCard.name}.`,
+            intentReason: `Swapping ${swapCard.name} for ${bestTarget.card.name}.`,
             weight,
-            tacticalExplanation: `Executing property swap: ${swapCard.name} for ${targetCard.name}. (Weight: +${weight})`,
+            tacticalExplanation: `Executing property swap: ${swapCard.name} for ${bestTarget.card.name}. (Weight: +${weight})`,
           });
         }
       }
@@ -399,7 +450,9 @@ export const evaluateBotTurnWithBrain = (
     // D. Bank Cash / Money / Actions
     if (card.type === "Money") {
       const weight =
-        bankTotal < 5 ? weights.BANK_SAFETY_NEED : weights.BANK_SAFETY_NORMAL;
+        bankTotal < weights.BANK_THRESHOLD
+          ? weights.BANK_SAFETY_NEED
+          : weights.BANK_SAFETY_NORMAL;
       candidates.push({
         action: {
           type: "PLAY_CARD",
@@ -414,9 +467,9 @@ export const evaluateBotTurnWithBrain = (
       (card as ActionCard).actionType !== "Just Say No"
     ) {
       const weight =
-        bankTotal < 3
-          ? weights.BANK_SAFETY_NEED - 20
-          : weights.BANK_SAFETY_NORMAL - 40;
+        bankTotal < weights.BANK_THRESHOLD
+          ? weights.BANK_ACTION_NEED
+          : weights.BANK_ACTION_NORMAL;
       candidates.push({
         action: {
           type: "PLAY_CARD",

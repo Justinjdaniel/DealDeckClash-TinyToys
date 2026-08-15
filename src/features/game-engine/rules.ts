@@ -8,6 +8,8 @@ import {
 } from "../../types/game";
 import { PROPERTY_SET_REQS } from "./deck";
 
+export const HAND_LIMIT = 7;
+
 // Checks if a property set of a specific color is complete
 export const isSetComplete = (
   cards: (PropertyCard | WildcardCard)[],

@@ -1,6 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 import { GameState, GameAction } from "../types/game";
-import { BotStyle, BotDecision, evaluateBotTurnWithBrain } from "./botBrain";
+import {
+  BotStyle,
+  BotDecision,
+  evaluateBotTurnWithBrain,
+  TRAINED_BOT_MODELS,
+} from "./botBrain";
 import { findJSNInHand } from "../features/game-engine/rules";
 
 interface UseBotControllerProps {
@@ -9,6 +14,7 @@ interface UseBotControllerProps {
   botStyle?: BotStyle;
   playSound?: (sound: string) => void;
   delayMs?: number;
+  randomSource?: () => number;
 }
 
 export interface UseBotControllerReturn {
@@ -25,6 +31,7 @@ export const useBotController = ({
   botStyle = "Aggressive",
   playSound,
   delayMs = 1200,
+  randomSource,
 }: UseBotControllerProps): UseBotControllerReturn => {
   const [botDecision, setBotDecision] = useState<BotDecision | null>(null);
   const [botCommentary, setBotCommentary] = useState<string>("");
@@ -37,12 +44,13 @@ export const useBotController = ({
   const stateRef = useRef(state);
   const onDispatchRef = useRef(onDispatch);
   const playSoundRef = useRef(playSound);
+  const randomRef = useRef(randomSource);
 
-  useEffect(() => {
-    stateRef.current = state;
-    onDispatchRef.current = onDispatch;
-    playSoundRef.current = playSound;
-  }, [state, onDispatch, playSound]);
+  // Assign refs directly during render body
+  stateRef.current = state;
+  onDispatchRef.current = onDispatch;
+  playSoundRef.current = playSound;
+  randomRef.current = randomSource;
 
   const bot = state.players.find((p) => p.isBot);
   const activePlayer = state.players[state.currentPlayerIndex];
@@ -93,6 +101,7 @@ export const useBotController = ({
 
     return () => {
       active = false;
+      setIsBotThinking(false);
       clearTimeout(timer);
     };
   }, [
@@ -110,24 +119,30 @@ export const useBotController = ({
   // Bot Reaction Resolution
   useEffect(() => {
     const rx = state.reactionQueue;
-    if (!rx || rx.targetPlayerId !== botId || !bot) return;
+    if (!rx || rx.targetPlayerId !== botId || !botId) return;
 
     let active = true;
 
     const timer = setTimeout(() => {
       if (!active) return;
 
-      const jsn = findJSNInHand(bot);
-      if (jsn && Math.random() < 0.6) {
+      const currentBot = stateRef.current.players.find((p) => p.id === botId);
+      if (!currentBot) return;
+
+      const jsn = findJSNInHand(currentBot);
+      const defenseRate = TRAINED_BOT_MODELS[botStyle]?.JSN_DEFENSE_RATE ?? 0.8;
+      const randomVal = randomRef.current ? randomRef.current() : Math.random();
+
+      if (jsn && randomVal < defenseRate) {
         playSoundRef.current?.("jsnPlay");
         onDispatchRef.current({
           type: "RESPOND_TO_ACTION",
-          payload: { playerId: bot.id, useJSN: true, jsnCardId: jsn.id },
+          payload: { playerId: botId, useJSN: true, jsnCardId: jsn.id },
         });
       } else {
         onDispatchRef.current({
           type: "RESPOND_TO_ACTION",
-          payload: { playerId: bot.id, useJSN: false },
+          payload: { playerId: botId, useJSN: false },
         });
       }
     }, 1000);
@@ -136,7 +151,7 @@ export const useBotController = ({
       active = false;
       clearTimeout(timer);
     };
-  }, [state.reactionQueue, botId, bot]);
+  }, [state.reactionQueue, botId, botStyle]);
 
   return {
     botDecision,

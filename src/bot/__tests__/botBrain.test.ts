@@ -87,6 +87,107 @@ describe("Bot Brain and Weight Matrix Tests", () => {
     expect(decision.tacticalExplanation).toContain("Dark Blue");
   });
 
+  it("should score WINNING_SET_COMPLETION path when bot already has 2 completed sets", () => {
+    const state = createMockGameState();
+    const botPlayer = state.players.find((p) => p.id === "bot")!;
+
+    // Complete Set 1: Brown (2 cards)
+    const br1: PropertyCard = {
+      id: "br1",
+      name: "Baltic",
+      type: "Property",
+      value: 1,
+      color: "Brown",
+    };
+    const br2: PropertyCard = {
+      id: "br2",
+      name: "Med",
+      type: "Property",
+      value: 1,
+      color: "Brown",
+    };
+
+    // Complete Set 2: Utility (2 cards)
+    const ut1: PropertyCard = {
+      id: "ut1",
+      name: "Electric",
+      type: "Property",
+      value: 2,
+      color: "Utility",
+    };
+    const ut2: PropertyCard = {
+      id: "ut2",
+      name: "Water",
+      type: "Property",
+      value: 2,
+      color: "Utility",
+    };
+
+    // Partial Set 3: Dark Blue (1 card)
+    const db1: PropertyCard = {
+      id: "db1",
+      name: "Park Place",
+      type: "Property",
+      value: 4,
+      color: "Dark Blue",
+    };
+    const db2: PropertyCard = {
+      id: "db2",
+      name: "Boardwalk",
+      type: "Property",
+      value: 4,
+      color: "Dark Blue",
+    };
+
+    botPlayer.properties = restructureProperties([br1, br2, ut1, ut2, db1]);
+    botPlayer.hand = [db2];
+
+    const decision = evaluateBotTurnWithBrain(state, "bot", "Aggressive");
+    expect(decision.action.type).toBe("PLAY_CARD");
+    expect(decision.weight).toBe(
+      TRAINED_BOT_MODELS.Aggressive.WINNING_SET_COMPLETION,
+    );
+    expect(decision.tacticalExplanation).toContain(
+      "Completing winning 3rd property set",
+    );
+  });
+
+  it("should evaluate state using style-specific model configurations for Defensive and Hoarder", () => {
+    const state = createMockGameState();
+    const botPlayer = state.players.find((p) => p.id === "bot")!;
+
+    // Give bot a Pass Go card and a 1M cash card with bank cash < BANK_THRESHOLD (0M)
+    const passGo: ActionCard = {
+      id: "pg1",
+      name: "Pass Go",
+      type: "Action",
+      value: 1,
+      actionType: "Pass Go",
+    };
+    const cash1: ActionCard = {
+      id: "a1",
+      name: "Sly Deal",
+      type: "Action",
+      value: 3,
+      actionType: "Sly Deal",
+    };
+
+    botPlayer.hand = [passGo, cash1];
+
+    const aggDecision = evaluateBotTurnWithBrain(state, "bot", "Aggressive");
+    const defDecision = evaluateBotTurnWithBrain(state, "bot", "Defensive");
+    const hoarderDecision = evaluateBotTurnWithBrain(state, "bot", "Hoarder");
+
+    // Defensive & Hoarder weight banking action cards higher when cash vault is empty
+    expect(defDecision.weight).toBe(
+      TRAINED_BOT_MODELS.Defensive.BANK_ACTION_NEED,
+    );
+    expect(hoarderDecision.weight).toBe(
+      TRAINED_BOT_MODELS.Hoarder.BANK_ACTION_NEED,
+    );
+    expect(aggDecision.weight).toBe(TRAINED_BOT_MODELS.Aggressive.PASS_GO);
+  });
+
   it("should prioritize Deal Breaker when opponent has a completed set", () => {
     const state = createMockGameState();
     const humanPlayer = state.players.find((p) => p.id === "human")!;
