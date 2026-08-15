@@ -5,10 +5,23 @@ import {
   WildcardCard,
   PropertyCard,
   ActionCard,
+  CustomGameRules,
 } from "../../types/game";
 import { PROPERTY_SET_REQS } from "./deck";
 
 export const HAND_LIMIT = 7;
+
+export const DEFAULT_CUSTOM_RULES: CustomGameRules = {
+  setsRequiredToFinish: 3,
+  allowDealBreakers: true,
+  allowForcedDeals: true,
+  allowRentCollection: true,
+  allowDoubleRent: true,
+  fullSetImmunity: false,
+  initialHandSize: 5,
+  actionLimitPerTurn: 3,
+  allowWildcards: true,
+};
 
 // Checks if a property set of a specific color is complete
 export const isSetComplete = (
@@ -51,15 +64,18 @@ export const calculateRent = (set: PropertySet): number => {
 };
 
 // Helper to check if a player has achieved the victory condition
-// Win: 3 completed property sets of different colors
-export const checkWinCondition = (player: PlayerState): boolean => {
+// Win: setsRequiredToFinish completed property sets of different colors
+export const checkWinCondition = (
+  player: PlayerState,
+  setsRequired: number = 3,
+): boolean => {
   const completedColors = new Set<CardColor>();
   player.properties.forEach((set) => {
     if (isSetComplete(set.cards, set.color)) {
       completedColors.add(set.color);
     }
   });
-  return completedColors.size >= 3;
+  return completedColors.size >= setsRequired;
 };
 
 // Re-evaluate a player's properties and partition them into correct colors, splitting wildcards correctly

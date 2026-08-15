@@ -7,12 +7,14 @@ import {
   ActionCard,
   ReactionState,
   PropertyCard,
+  CustomGameRules,
 } from "../../types/game";
 import { createDeck, shuffleDeck } from "./deck";
 import {
   restructureProperties,
   checkWinCondition,
   calculateRent,
+  DEFAULT_CUSTOM_RULES,
 } from "./rules";
 
 // Simulate a slow asynchronous network API layer for future WebSockets
@@ -73,13 +75,17 @@ const advanceTurn = (nextState: GameState, logMsg: (msg: string) => void) => {
   }
   const drawn = nextState.deck.splice(0, drawCount);
   nextPlayer.hand.push(...drawn);
-  nextState.actionPointsLeft = 3;
+
+  const rules = nextState.customRules || DEFAULT_CUSTOM_RULES;
+  nextState.actionPointsLeft = rules.actionLimitPerTurn;
 
   logMsg(`Turn starts for ${nextPlayer.name}. Draws ${drawCount} cards.`);
 };
 
 // Pure guard helper to check if an action can be legally dispatched
 export const canDispatch = (state: GameState, action: GameAction): boolean => {
+  const rules = state.customRules || DEFAULT_CUSTOM_RULES;
+
   switch (action.type) {
     case "START_GAME":
     case "RESET_GAME":
@@ -106,6 +112,7 @@ export const canDispatch = (state: GameState, action: GameAction): boolean => {
       if (targetZone === "properties") {
         if (card.type === "Property") return true;
         if (card.type === "Wildcard") {
+          if (!rules.allowWildcards) return false;
           const wild = card as WildcardCard;
           const selectedColor = options?.color || wild.colors[0];
           return (
@@ -123,15 +130,18 @@ export const canDispatch = (state: GameState, action: GameAction): boolean => {
           return !!options?.targetCardId;
         }
         if (actionCard.actionType === "Forced Deal") {
+          if (!rules.allowForcedDeals) return false;
           return !!options?.targetCardId && !!options?.swapCardId;
         }
         if (actionCard.actionType === "Deal Breaker") {
+          if (!rules.allowDealBreakers) return false;
           return !!options?.targetColor;
         }
         if (
           actionCard.actionType === "Rent" ||
           actionCard.actionType === "Multi-Rent"
         ) {
+          if (!rules.allowRentCollection) return false;
           return !!options?.color;
         }
         return true;
@@ -141,6 +151,7 @@ export const canDispatch = (state: GameState, action: GameAction): boolean => {
     }
 
     case "TOGGLE_WILDCARD_COLOR": {
+      if (!rules.allowWildcards) return false;
       const { playerId, cardId, color } = action.payload;
       if (state.status !== "PLAYING") return false;
 
@@ -218,21 +229,63 @@ export const dispatchAction = (
     }
   };
 
+  const activeRules: CustomGameRules =
+    nextState.customRules || DEFAULT_CUSTOM_RULES;
+
   switch (action.type) {
     case "START_GAME": {
       logMsg("Game starting vs Smart AI Opponent.");
       nextState.status = "PLAYING";
       nextState.roomCode = action.payload.roomCode || "LOBBY";
+      nextState.customRules =
+        action.payload.customRules || DEFAULT_CUSTOM_RULES;
 
-      // Build and shuffle 99 card deck
-      const freshDeck = shuffleDeck(createDeck());
+      const rules = nextState.customRules;
 
-      // Deal 5 cards to each player
+      // Build and shuffle deck
+      let freshDeck = shuffleDeck(createDeck());
+
+      // Filter out disabled card categories if specified in custom rules
+      if (!rules.allowWildcards) {
+        freshDeck = freshDeck.filter((c) => c.type !== "Wildcard");
+      }
+      if (!rules.allowDealBreakers) {
+        freshDeck = freshDeck.filter(
+          (c) =>
+            !(
+              c.type === "Action" &&
+              (c as ActionCard).actionType === "Deal Breaker"
+            ),
+        );
+      }
+      if (!rules.allowForcedDeals) {
+        freshDeck = freshDeck.filter(
+          (c) =>
+            !(
+              c.type === "Action" &&
+              (c as ActionCard).actionType === "Forced Deal"
+            ),
+        );
+      }
+      if (!rules.allowRentCollection) {
+        freshDeck = freshDeck.filter(
+          (c) =>
+            !(
+              c.type === "Action" &&
+              ((c as ActionCard).actionType === "Rent" ||
+                (c as ActionCard).actionType === "Multi-Rent")
+            ),
+        );
+      }
+
+      const initHandSize = rules.initialHandSize || 5;
+
+      // Deal initial hand size to each player
       nextState.players.forEach((p) => {
-        p.hand = freshDeck.splice(0, 5);
+        p.hand = freshDeck.splice(0, initHandSize);
         p.bank = [];
         p.properties = restructureProperties([]);
-        logMsg(`${p.name} dealt 5 cards.`);
+        logMsg(`${p.name} dealt ${initHandSize} cards.`);
       });
 
       // Draw 2 cards for the starting player
@@ -243,7 +296,7 @@ export const dispatchAction = (
       nextState.deck = freshDeck;
       nextState.discardPile = [];
       nextState.currentPlayerIndex = 0;
-      nextState.actionPointsLeft = 3;
+      nextState.actionPointsLeft = rules.actionLimitPerTurn;
       nextState.winnerId = null;
       nextState.reactionQueue = null;
       nextState.pendingDiscardPlayerId = null;
@@ -275,7 +328,6 @@ export const dispatchAction = (
       if (nextState.status !== "PLAYING" || nextState.actionPointsLeft <= 0)
         break;
 
-      // Verify playerId matches currently designated active player before spending action points
       const currentPlayer = nextState.players[nextState.currentPlayerIndex];
       if (playerId !== currentPlayer.id) break;
 
@@ -287,7 +339,6 @@ export const dispatchAction = (
 
       const card = player.hand[cardIdx];
 
-      // Handle targetZone = BANK (allow banking only Money or Action cards)
       if (targetZone === "bank") {
         if (card.type !== "Money" && card.type !== "Action") break;
         player.hand.splice(cardIdx, 1);
@@ -295,9 +346,7 @@ export const dispatchAction = (
         nextState.actionPointsLeft--;
         logMsg(`${player.name} banked ${card.name} (Value: ${card.value}M).`);
         accepted = true;
-      }
-      // Handle targetZone = PROPERTIES
-      else if (targetZone === "properties") {
+      } else if (targetZone === "properties") {
         if (card.type === "Property") {
           player.hand.splice(cardIdx, 1);
           const allProperties = player.properties.flatMap((set) => set.cards);
@@ -309,6 +358,7 @@ export const dispatchAction = (
           );
           accepted = true;
         } else if (card.type === "Wildcard") {
+          if (!activeRules.allowWildcards) break;
           const wild = card as WildcardCard;
           const selectedColor = options?.color || wild.colors[0];
           if (
@@ -327,24 +377,26 @@ export const dispatchAction = (
           logMsg(`${player.name} played ${card.name} as ${selectedColor}.`);
           accepted = true;
         }
-      }
-      // Handle targetZone = CENTER (Action play)
-      else if (targetZone === "center") {
+      } else if (targetZone === "center") {
         if (card.type !== "Action") break;
         const actionCard = card as ActionCard;
 
-        // Validate required options before committing card consumption or decrementing action points
         if (actionCard.actionType === "Sly Deal") {
           if (!options?.targetCardId) break;
         } else if (actionCard.actionType === "Forced Deal") {
-          if (!options?.targetCardId || !options?.swapCardId) break;
+          if (
+            !activeRules.allowForcedDeals ||
+            !options?.targetCardId ||
+            !options?.swapCardId
+          )
+            break;
         } else if (actionCard.actionType === "Deal Breaker") {
-          if (!options?.targetColor) break;
+          if (!activeRules.allowDealBreakers || !options?.targetColor) break;
         } else if (
           actionCard.actionType === "Rent" ||
           actionCard.actionType === "Multi-Rent"
         ) {
-          if (!options?.color) break;
+          if (!activeRules.allowRentCollection || !options?.color) break;
         }
 
         player.hand.splice(cardIdx, 1);
@@ -354,9 +406,7 @@ export const dispatchAction = (
         logMsg(`${player.name} played Action Card: ${actionCard.name}.`);
         accepted = true;
 
-        // Execute actual action mechanics
         if (actionCard.actionType === "Pass Go") {
-          // Immediately draw 2 cards with discard reshuffling guard excluding current actionCard
           if (nextState.deck.length < 2) {
             const eligibleDiscards = nextState.discardPile.filter(
               (c) => c !== actionCard,
@@ -482,22 +532,25 @@ export const dispatchAction = (
         }
       }
 
-      // Check win condition instantly
-      const isWinner = checkWinCondition(player);
+      // Check win condition instantly using configured sets count
+      const isWinner = checkWinCondition(
+        player,
+        activeRules.setsRequiredToFinish,
+      );
       if (isWinner) {
         nextState.status = "WINNER";
         nextState.winnerId = player.id;
         logMsg(
-          `🏆 WINNER! ${player.name} has completed 3 full sets and won the match!`,
+          `🏆 WINNER! ${player.name} has completed ${activeRules.setsRequiredToFinish} full sets and won the match!`,
         );
       }
       break;
     }
 
     case "TOGGLE_WILDCARD_COLOR": {
+      if (!activeRules.allowWildcards) break;
       const { playerId, cardId, color } = action.payload;
 
-      // Restrict TOGGLE_WILDCARD_COLOR to active turn and status === "PLAYING"
       if (nextState.status !== "PLAYING") break;
       const activePlayer = nextState.players[nextState.currentPlayerIndex];
       if (playerId !== activePlayer.id) break;
@@ -520,12 +573,11 @@ export const dispatchAction = (
           );
           accepted = true;
 
-          // Re-evaluate win condition
-          if (checkWinCondition(player)) {
+          if (checkWinCondition(player, activeRules.setsRequiredToFinish)) {
             nextState.status = "WINNER";
             nextState.winnerId = player.id;
             logMsg(
-              `🏆 WINNER! ${player.name} has completed 3 full sets and won!`,
+              `🏆 WINNER! ${player.name} has completed ${activeRules.setsRequiredToFinish} full sets and won!`,
             );
           }
         }
@@ -534,7 +586,7 @@ export const dispatchAction = (
     }
 
     case "RESPOND_TO_ACTION": {
-      const { playerId, useJSN, jsnCardId } = action.payload;
+      const { playerId, useJSN, jsnCardId, selectedCardIds } = action.payload;
       const rx = nextState.reactionQueue;
       if (!rx || rx.targetPlayerId !== playerId) break;
 
@@ -573,7 +625,7 @@ export const dispatchAction = (
               rx.targetPlayerId = alternativePlayerId;
             }
 
-            rx.timerSeconds = 5; // Reset reaction timer
+            rx.timerSeconds = 5;
           }
         }
       } else {
@@ -627,7 +679,6 @@ export const dispatchAction = (
         nextState.status = "PLAYING";
         nextState.pendingDiscardPlayerId = null;
 
-        // Transition turn using advanced turn helper
         advanceTurn(nextState, logMsg);
       }
       break;
@@ -653,7 +704,6 @@ export const dispatchAction = (
           `⚠️ ${player.name} has ${player.hand.length} cards in hand and must discard down to 7.`,
         );
       } else {
-        // Transition turn using advanced turn helper
         advanceTurn(nextState, logMsg);
       }
       break;
@@ -662,8 +712,6 @@ export const dispatchAction = (
 
   return Object.assign(nextState, { accepted });
 };
-
-// Internal solver to resolve effects when reaction is declined or timers run out
 
 // Helper to validate payment selection against payer assets and required debt amount
 const validatePaymentSelection = (
@@ -679,7 +727,6 @@ const validatePaymentSelection = (
   ];
   const allOnTableIds = new Set(allOnTableAssets.map((c) => c.id));
 
-  // Verify all card IDs belong to payer
   const allBelong = cardIds.every((id) => allOnTableIds.has(id));
   if (!allBelong) return false;
 
@@ -713,7 +760,6 @@ const transferSpecificCards = (
 
   const remainingCardIds = new Set(cardIds);
 
-  // Transfer from Bank
   const keptBank: Card[] = [];
   from.bank.forEach((card) => {
     if (remainingCardIds.has(card.id)) {
@@ -728,7 +774,6 @@ const transferSpecificCards = (
   });
   from.bank = keptBank;
 
-  // Transfer from Properties if any IDs remain
   if (remainingCardIds.size > 0) {
     const allProps = from.properties.flatMap((s) => s.cards);
     const keptProps: (PropertyCard | WildcardCard)[] = [];
@@ -773,6 +818,7 @@ const resolveReaction = (
 
   if (!target || !attacker) return;
 
+  const rules = state.customRules || DEFAULT_CUSTOM_RULES;
   const logs = state.logs;
   const logMsg = (msg: string) => {
     logs.unshift(`[${new Date().toLocaleTimeString()}] ${msg}`);
@@ -825,8 +871,10 @@ const resolveReaction = (
         const currentSet = target.properties.find((set) =>
           set.cards.some((c) => c.id === targetCardId),
         );
-        if (currentSet && currentSet.isComplete) {
-          logMsg(`❌ Sly Deal failed: target card belongs to a completed set!`);
+        if (rules.fullSetImmunity && currentSet && currentSet.isComplete) {
+          logMsg(
+            `❌ Sly Deal failed: target card belongs to a completed set protected by Full Set Immunity!`,
+          );
           return;
         }
 
@@ -857,9 +905,9 @@ const resolveReaction = (
         const targetSet = target.properties.find((set) =>
           set.cards.some((c) => c.id === targetCardId),
         );
-        if (targetSet && targetSet.isComplete) {
+        if (rules.fullSetImmunity && targetSet && targetSet.isComplete) {
           logMsg(
-            `❌ Forced Deal failed: target property belongs to a completed set!`,
+            `❌ Forced Deal failed: target property belongs to a completed set protected by Full Set Immunity!`,
           );
           return;
         }
@@ -885,6 +933,13 @@ const resolveReaction = (
         (set) => set.color === targetColor,
       );
       if (targetSet && targetSet.isComplete) {
+        if (rules.fullSetImmunity) {
+          logMsg(
+            `❌ Deal Breaker failed: target completed set is protected by Full Set Immunity!`,
+          );
+          return;
+        }
+
         const stolenCards = [...targetSet.cards];
 
         const targetProps = target.properties
@@ -903,10 +958,12 @@ const resolveReaction = (
     }
   }
 
-  if (checkWinCondition(attacker)) {
+  if (checkWinCondition(attacker, rules.setsRequiredToFinish)) {
     state.status = "WINNER";
     state.winnerId = attacker.id;
-    logMsg(`🏆 WINNER! ${attacker.name} has completed 3 full sets and won!`);
+    logMsg(
+      `🏆 WINNER! ${attacker.name} has completed ${rules.setsRequiredToFinish} full sets and won!`,
+    );
   }
 };
 

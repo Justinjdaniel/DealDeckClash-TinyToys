@@ -10,11 +10,19 @@ import {
   LucideIcon,
   Volume2,
   VolumeX,
+  Sliders,
 } from "lucide-react";
 import { useGamifiedAudio } from "../audio/AudioContext";
+import { CustomGameRules } from "../../types/game";
+import { DEFAULT_CUSTOM_RULES } from "./rules";
+import { GameRulesDashboard } from "./GameRulesDashboard";
 
 interface MenuProps {
-  onStartGame: (botStyle: BotStyle, roomCode?: string) => void;
+  onStartGame: (
+    botStyle: BotStyle,
+    roomCode?: string,
+    customRules?: CustomGameRules,
+  ) => void;
 }
 
 export const Menu: React.FC<MenuProps> = ({ onStartGame }) => {
@@ -25,6 +33,9 @@ export const Menu: React.FC<MenuProps> = ({ onStartGame }) => {
   const [multiplayerMode, setMultiplayerMode] = useState<"lobby" | "room">(
     "lobby",
   );
+  const [customRules, setCustomRules] =
+    useState<CustomGameRules>(DEFAULT_CUSTOM_RULES);
+  const [showRulesDashboard, setShowRulesDashboard] = useState(false);
 
   const botStyles: { name: BotStyle; desc: string; icon: LucideIcon }[] = [
     {
@@ -46,7 +57,7 @@ export const Menu: React.FC<MenuProps> = ({ onStartGame }) => {
 
   const handleStartLocal = () => {
     playSound("click");
-    onStartGame(selectedStyle);
+    onStartGame(selectedStyle, undefined, customRules);
   };
 
   const handleJoinRoom = () => {
@@ -57,7 +68,7 @@ export const Menu: React.FC<MenuProps> = ({ onStartGame }) => {
   };
 
   return (
-    <div className="w-full h-full flex flex-col justify-between p-5 text-left">
+    <div className="w-full h-full flex flex-col justify-between p-5 text-left relative">
       {/* Lobby Top Panel */}
       <div className="flex items-center justify-between border-b border-casino-gold/15 pb-4">
         <div>
@@ -139,6 +150,18 @@ export const Menu: React.FC<MenuProps> = ({ onStartGame }) => {
                 );
               })}
             </div>
+
+            <button
+              onClick={() => {
+                playSound("click");
+                setShowRulesDashboard(true);
+              }}
+              className="w-full py-2.5 bg-[#20222c] hover:bg-[#282a36] border border-yellow-500/30 text-yellow-400 font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-md"
+            >
+              <Sliders className="w-4 h-4 text-yellow-400" />
+              Configure Game Rules ({customRules.setsRequiredToFinish} Sets to
+              Win)
+            </button>
 
             <button
               onClick={handleStartLocal}
@@ -258,6 +281,17 @@ export const Menu: React.FC<MenuProps> = ({ onStartGame }) => {
                   </div>
                 </div>
 
+                <button
+                  onClick={() => {
+                    playSound("click");
+                    setShowRulesDashboard(true);
+                  }}
+                  className="w-full py-2.5 bg-[#20222c] hover:bg-[#282a36] border border-yellow-500/30 text-yellow-400 font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-md"
+                >
+                  <Sliders className="w-4 h-4 text-yellow-400" />
+                  Configure Game Rules ({customRules.setsRequiredToFinish} Sets)
+                </button>
+
                 <div className="space-y-2">
                   <div className="p-2.5 bg-white/5 rounded-lg flex items-center justify-between text-xs">
                     <span className="text-white font-bold">You (Ready)</span>
@@ -274,7 +308,7 @@ export const Menu: React.FC<MenuProps> = ({ onStartGame }) => {
                 <button
                   onClick={() => {
                     playSound("click");
-                    onStartGame(selectedStyle, roomCode);
+                    onStartGame(selectedStyle, roomCode, customRules);
                   }}
                   className="w-full py-3 bg-casino-gold text-casino-felt font-bold text-xs rounded-xl hover:scale-[1.02] transition-transform"
                 >
@@ -307,6 +341,20 @@ export const Menu: React.FC<MenuProps> = ({ onStartGame }) => {
           </div>
         )}
       </div>
+
+      {/* Rules Dashboard Modal Overlay */}
+      {showRulesDashboard && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <GameRulesDashboard
+            initialRules={customRules}
+            onSaveAndApply={(updatedRules) => {
+              setCustomRules(updatedRules);
+              setShowRulesDashboard(false);
+            }}
+            onClose={() => setShowRulesDashboard(false)}
+          />
+        </div>
+      )}
 
       {/* Lobby Footer info */}
       <div className="border-t border-white/5 pt-3.5 text-center text-[10px] text-gray-500 font-semibold leading-relaxed">

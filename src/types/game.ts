@@ -89,6 +89,18 @@ export interface ReactionState {
   timerSeconds: number;
 }
 
+export interface CustomGameRules {
+  setsRequiredToFinish: number; // default: 3
+  allowDealBreakers: boolean; // default: true
+  allowForcedDeals: boolean; // default: true
+  allowRentCollection: boolean; // default: true
+  allowDoubleRent: boolean; // default: true
+  fullSetImmunity: boolean; // default: false
+  initialHandSize: number; // default: 5
+  actionLimitPerTurn: number; // default: 3
+  allowWildcards: boolean; // default: true
+}
+
 export interface GameState {
   gameId: string;
   roomCode?: string;
@@ -103,10 +115,18 @@ export interface GameState {
   reactionQueue: ReactionState | null; // High-priority JSN interaction
   pendingDiscardPlayerId: string | null;
   logs: string[];
+  customRules?: CustomGameRules;
 }
 
 export type GameAction =
-  | { type: "START_GAME"; payload: { roomCode?: string; botStyle?: string } }
+  | {
+      type: "START_GAME";
+      payload: {
+        roomCode?: string;
+        botStyle?: string;
+        customRules?: CustomGameRules;
+      };
+    }
   | { type: "RESET_GAME" }
   | {
       type: "PLAY_CARD";

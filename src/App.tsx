@@ -1,11 +1,20 @@
 import { useState, useCallback, useReducer } from "react";
-import { GameState, GameAction, Card, ActionCard } from "./types/game";
+import {
+  GameState,
+  GameAction,
+  Card,
+  ActionCard,
+  CustomGameRules,
+} from "./types/game";
 import { BotStyle } from "./features/game-engine/bot";
 import { Menu } from "./features/game-engine/Menu";
 import { Board } from "./features/game-engine/Board";
 import { ReactionModal } from "./features/game-engine/ReactionModal";
 import { dispatchAction, canDispatch } from "./features/game-engine/api";
-import { restructureProperties } from "./features/game-engine/rules";
+import {
+  restructureProperties,
+  DEFAULT_CUSTOM_RULES,
+} from "./features/game-engine/rules";
 import { AudioProvider, useGamifiedAudio } from "./features/audio/AudioContext";
 import { useGamification } from "./hooks/useGamification";
 import { StageWrapper } from "./components/layout/StageWrapper";
@@ -43,6 +52,7 @@ const initialGameState: GameState = {
   reactionQueue: null,
   pendingDiscardPlayerId: null,
   logs: [],
+  customRules: DEFAULT_CUSTOM_RULES,
 };
 
 function GameOrchestrator() {
@@ -61,13 +71,17 @@ function GameOrchestrator() {
     triggerScreenShake,
   } = useGamification(playSound);
 
-  const handleStartGame = (style: BotStyle, roomCode?: string) => {
+  const handleStartGame = (
+    style: BotStyle,
+    roomCode?: string,
+    customRules?: CustomGameRules,
+  ) => {
     setBotStyle(style);
     playSound("cardSweep");
 
     const action: GameAction = {
       type: "START_GAME",
-      payload: { roomCode, botStyle: style },
+      payload: { roomCode, botStyle: style, customRules },
     };
 
     dispatch(action);
