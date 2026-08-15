@@ -8,7 +8,7 @@ test('Testing modal interactions for crashes', async ({ page }) => {
   page.on('pageerror', err => errors.push(err.message + '\n' + err.stack));
 
   await page.goto('/');
-  await page.getByRole('button', { name: /Begin Match/i }).click();
+  await page.getByRole('button', { name: /QUICK MATCH/i }).click();
 
   // Test 1: Open Logs Modal
   const logsBtn = page.getByRole('button', { name: /Console Logs/i });
