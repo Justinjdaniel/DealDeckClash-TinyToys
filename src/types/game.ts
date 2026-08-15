@@ -44,6 +44,8 @@ export type ActionCardType =
   | "Forced Deal"
   | "Deal Breaker"
   | "Just Say No"
+  | "House"
+  | "Hotel"
   | "Rent"
   | "Multi-Rent";
 
@@ -127,7 +129,12 @@ export type GameAction =
     }
   | {
       type: "RESPOND_TO_ACTION";
-      payload: { playerId: string; useJSN: boolean; jsnCardId?: string };
+      payload: {
+        playerId: string;
+        useJSN: boolean;
+        jsnCardId?: string;
+        selectedCardIds?: string[];
+      };
     }
   | { type: "REACTION_TIMED_OUT" }
   | {

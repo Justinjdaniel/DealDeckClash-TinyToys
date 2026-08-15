@@ -24,7 +24,6 @@ import {
 import confetti from "canvas-confetti";
 import { useGamifiedAudio } from "../audio/AudioContext";
 import { PlayingCard } from "../cards/PlayingCard";
-import { XPBar } from "../../components/ui/XPBar";
 import { BotSpeechBubble } from "../../components/ui/BotSpeechBubble";
 import { useBotController } from "../../hooks/useBotController";
 
@@ -32,9 +31,6 @@ interface BoardProps {
   state: GameState;
   onDispatch: (action: GameAction) => boolean;
   botStyle: BotStyle;
-  xp: number;
-  level: number;
-  streak: number;
   gainXP: (amount: number, reason: string, x?: number, y?: number) => void;
   unlockAchievement: (
     key: import("../../hooks/useGamification").MilestoneKey,
@@ -96,9 +92,6 @@ export const Board: React.FC<BoardProps> = ({
   state,
   onDispatch,
   botStyle,
-  xp,
-  level,
-  streak,
   gainXP,
   unlockAchievement,
   incrementStreak,
@@ -599,11 +592,6 @@ export const Board: React.FC<BoardProps> = ({
         </div>
       </div>
 
-      {/* Embedded XP Progression Bar */}
-      <div className="px-3 sm:px-4 py-1.5 relative z-20 bg-slate-900/60 border-b border-casino-gold/10 flex justify-center backdrop-blur-sm">
-        <XPBar xp={xp} level={level} streak={streak} />
-      </div>
-
       {/* Main Game Table Container */}
       <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-4 relative z-10 scrollbar-none min-h-0">
         {/* BOT AI SECTION */}
@@ -699,9 +687,13 @@ export const Board: React.FC<BoardProps> = ({
                         </span>
                       )}
                     </div>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {set.cards.map((card) => (
-                        <div key={card.id} className="w-10 h-14 flex-shrink-0">
+                    <div className="flex flex-col -space-y-10 mt-1 pb-2">
+                      {set.cards.map((card, idx) => (
+                        <div
+                          key={card.id}
+                          className="w-12 h-18 flex-shrink-0 relative shadow-md"
+                          style={{ zIndex: idx }}
+                        >
                           <PlayingCard card={card} />
                         </div>
                       ))}
@@ -811,11 +803,12 @@ export const Board: React.FC<BoardProps> = ({
                       )}
                     </div>
 
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {set.cards.map((card) => (
+                    <div className="flex flex-col -space-y-12 mt-1 pb-2">
+                      {set.cards.map((card, idx) => (
                         <div
                           key={card.id}
-                          className="w-11 h-16 flex-shrink-0 relative group"
+                          className="w-14 h-20 flex-shrink-0 relative group shadow-md"
+                          style={{ zIndex: idx }}
                         >
                           <PlayingCard card={card} />
                           {card.type === "Wildcard" && (
@@ -837,7 +830,7 @@ export const Board: React.FC<BoardProps> = ({
                                   });
                                 }
                               }}
-                              className="absolute -top-1 -right-1 bg-casino-gold text-black text-[7px] font-black px-1 rounded shadow hover:scale-110 transition-transform z-10 focus:outline-none focus:ring-1 focus:ring-black"
+                              className="absolute -top-1 -right-1 bg-casino-gold text-black text-[7px] font-black px-1 rounded shadow hover:scale-110 transition-transform z-20 focus:outline-none focus:ring-1 focus:ring-black"
                               title="Flip Wildcard Color"
                               aria-label={`Flip Wildcard ${card.name} color`}
                             >

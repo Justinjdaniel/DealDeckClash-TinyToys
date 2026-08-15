@@ -664,7 +664,67 @@ export const dispatchAction = (
 };
 
 // Internal solver to resolve effects when reaction is declined or timers run out
-const resolveReaction = (state: GameState, rx: ReactionState) => {
+
+// Handle explicit card transfer when player manually selects payment cards
+const transferSpecificCards = (
+  from: PlayerState,
+  to: PlayerState,
+  cardIds: string[],
+  state: GameState,
+) => {
+  const logs = state.logs;
+  const logMsg = (msg: string) => {
+    logs.unshift(`[${new Date().toLocaleTimeString()}] ${msg}`);
+  };
+
+  const remainingCardIds = new Set(cardIds);
+
+  // Transfer from Bank
+  const keptBank: Card[] = [];
+  from.bank.forEach((card) => {
+    if (remainingCardIds.has(card.id)) {
+      remainingCardIds.delete(card.id);
+      to.bank.push(card);
+      logMsg(
+        `Transfer: ${from.name} paid ${card.name} (${card.value}M) from Bank to ${to.name}.`,
+      );
+    } else {
+      keptBank.push(card);
+    }
+  });
+  from.bank = keptBank;
+
+  // Transfer from Properties if any IDs remain
+  if (remainingCardIds.size > 0) {
+    const allProps = from.properties.flatMap((s) => s.cards);
+    const keptProps: (PropertyCard | WildcardCard)[] = [];
+    const forfeitedProps: (PropertyCard | WildcardCard)[] = [];
+
+    allProps.forEach((card) => {
+      if (remainingCardIds.has(card.id)) {
+        remainingCardIds.delete(card.id);
+        forfeitedProps.push(card);
+        logMsg(
+          `Transfer: ${from.name} transferred property ${card.name} (${card.value}M) to ${to.name}.`,
+        );
+      } else {
+        keptProps.push(card);
+      }
+    });
+
+    from.properties = restructureProperties(keptProps);
+    if (forfeitedProps.length > 0) {
+      const toProps = to.properties.flatMap((s) => s.cards);
+      to.properties = restructureProperties([...toProps, ...forfeitedProps]);
+    }
+  }
+};
+
+const resolveReaction = (
+  state: GameState,
+  rx: ReactionState,
+  selectedCardIds?: string[],
+) => {
   const activeTargetId = rx.targetPlayerId;
   const originalId = rx.originalActionPlayerId;
 
@@ -691,13 +751,21 @@ const resolveReaction = (state: GameState, rx: ReactionState) => {
 
   if (type === "Debt Collector" || type === "Its My Birthday") {
     const amount = rx.actionDetails.amount || 0;
-    transferCash(target, attacker, amount, state);
+    if (selectedCardIds && selectedCardIds.length >= 0) {
+      transferSpecificCards(target, attacker, selectedCardIds, state);
+    } else {
+      transferCash(target, attacker, amount, state);
+    }
   } else if (type === "Rent" || type === "Multi-Rent") {
     const amount = rx.actionDetails.amount || 0;
     logMsg(
       `Collecting ${amount}M rent from ${target.name} to ${attacker.name}.`,
     );
-    transferCash(target, attacker, amount, state);
+    if (selectedCardIds && selectedCardIds.length >= 0) {
+      transferSpecificCards(target, attacker, selectedCardIds, state);
+    } else {
+      transferCash(target, attacker, amount, state);
+    }
   } else if (type === "Sly Deal") {
     const targetCardId = rx.actionDetails.targetCardId;
     if (targetCardId) {
