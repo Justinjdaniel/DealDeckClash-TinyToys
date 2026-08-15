@@ -926,8 +926,8 @@ export const Board: React.FC<BoardProps> = ({
         </div>
 
         {/* Curved Card Fan Layout */}
-        <div className="w-full flex items-center justify-center pt-2 pb-1 overflow-visible relative min-h-[130px] sm:min-h-[150px]">
-          <div className="flex items-center justify-center -space-x-8 sm:-space-x-10 max-w-full px-4 overflow-x-auto overflow-y-visible scrollbar-none py-2">
+        <div className="w-full flex items-center justify-center pt-6 pb-2 overflow-x-auto overflow-y-visible scrollbar-none relative min-h-[140px] sm:min-h-[160px]">
+          <div className="flex items-center justify-center -space-x-8 sm:-space-x-10 px-6 py-4 overflow-visible">
             {human.hand.map((card, idx) => {
               const isSelected = selectedHandCard?.id === card.id;
               const total = human.hand.length;
@@ -941,18 +941,20 @@ export const Board: React.FC<BoardProps> = ({
                   key={card.id}
                   style={{
                     transform: `rotate(${rotateDeg}deg) translateY(${translateY}px)`,
-                    zIndex: isSelected ? 30 : idx + 1,
+                    zIndex: isSelected ? 40 : idx + 1,
                   }}
-                  className="transition-all duration-200 ease-out hover:-translate-y-6 hover:scale-110 hover:z-40 flex-shrink-0 cursor-pointer"
+                  className="flex-shrink-0 cursor-pointer group relative transition-transform duration-200"
                 >
-                  <button
-                    type="button"
-                    onClick={() => handleHandCardClick(card)}
-                    aria-label={`Select hand card ${card.name}`}
-                    className="w-16 h-24 sm:w-20 sm:h-28 flex-shrink-0 text-left focus:outline-none focus:ring-2 focus:ring-casino-gold rounded-2xl block"
-                  >
-                    <PlayingCard card={card} isSelected={isSelected} />
-                  </button>
+                  <div className="transform transition-all duration-200 ease-out group-hover:-translate-y-7 group-hover:scale-110 group-hover:z-50 relative">
+                    <button
+                      type="button"
+                      onClick={() => handleHandCardClick(card)}
+                      aria-label={`Select hand card ${card.name}`}
+                      className="w-16 h-24 sm:w-20 sm:h-28 flex-shrink-0 text-left focus:outline-none focus:ring-2 focus:ring-casino-gold rounded-2xl block"
+                    >
+                      <PlayingCard card={card} isSelected={isSelected} />
+                    </button>
+                  </div>
                 </div>
               );
             })}
