@@ -82,8 +82,8 @@ export const createDeck = (): Card[] => {
       value: 2,
       description: "2M Face Value Bankable Cash",
     });
-  // 6x 1M
-  for (let i = 0; i < 6; i++)
+  // 4x 1M
+  for (let i = 0; i < 4; i++)
     cards.push({
       id: nextId("m1"),
       name: "1M Money",
@@ -397,8 +397,8 @@ export const createDeck = (): Card[] => {
     });
 
   // 4. Action Cards
-  // 10x Pass Go (Draw 2 extra cards)
-  for (let i = 0; i < 10; i++)
+  // 7x Pass Go (Draw 2 extra cards)
+  for (let i = 0; i < 7; i++)
     cards.push({
       id: nextId("a-pg"),
       name: "Pass Go",
@@ -466,6 +466,27 @@ export const createDeck = (): Card[] => {
       value: 4,
       actionType: "Just Say No",
       description: "Counter any Action card played against you.",
+    });
+
+  // 3x House
+  for (let i = 0; i < 3; i++)
+    cards.push({
+      id: nextId("a-house"),
+      name: "House",
+      type: "Action",
+      value: 3,
+      actionType: "House",
+      description: "Add to a complete property set to increase rent.",
+    });
+  // 2x Hotel
+  for (let i = 0; i < 2; i++)
+    cards.push({
+      id: nextId("a-hotel"),
+      name: "Hotel",
+      type: "Action",
+      value: 4,
+      actionType: "Hotel",
+      description: "Add to a complete set with a House to increase rent.",
     });
 
   // 5. Rent & Multi-Rent Cards

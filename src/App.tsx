@@ -51,9 +51,6 @@ function GameOrchestrator() {
   const { playSound } = useGamifiedAudio();
 
   const {
-    xp,
-    level,
-    streak,
     screenShake,
     floatingPoints,
     recentAchievement,
@@ -88,14 +85,14 @@ function GameOrchestrator() {
   );
 
   const handleReactionRespond = useCallback(
-    (useJSN: boolean, jsnCardId?: string) => {
+    (useJSN: boolean, jsnCardId?: string, selectedCardIds?: string[]) => {
       if (useJSN) {
         playSound("jsnPlay");
         unlockAchievement("SHIELD_MASTER");
       }
       handleActionDispatch({
         type: "RESPOND_TO_ACTION",
-        payload: { playerId: "human", useJSN, jsnCardId },
+        payload: { playerId: "human", useJSN, jsnCardId, selectedCardIds },
       });
     },
     [handleActionDispatch, playSound, unlockAchievement],
@@ -123,9 +120,6 @@ function GameOrchestrator() {
             state={gameState}
             onDispatch={handleActionDispatch}
             botStyle={botStyle}
-            xp={xp}
-            level={level}
-            streak={streak}
             gainXP={gainXP}
             unlockAchievement={unlockAchievement}
             incrementStreak={incrementStreak}
@@ -142,6 +136,7 @@ function GameOrchestrator() {
               onReact={handleReactionRespond}
               onTimeout={handleReactionTimeout}
               jsnCard={humanJSNCard}
+              humanPlayer={humanPlayer}
             />
           )}
 

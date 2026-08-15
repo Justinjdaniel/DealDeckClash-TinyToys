@@ -1,13 +1,19 @@
 import React, { useEffect, useState, useRef } from "react";
-import { ReactionState, Card } from "../../types/game";
+import { ReactionState, Card, PlayerState } from "../../types/game";
 import { Shield, XCircle } from "lucide-react";
 import { useGamifiedAudio } from "../audio/AudioContext";
+import { PaymentSelectionModal } from "../../components/ui/PaymentSelectionModal";
 
 interface ReactionModalProps {
   reaction: ReactionState;
-  onReact: (useJSN: boolean, jsnCardId?: string) => void;
+  onReact: (
+    useJSN: boolean,
+    jsnCardId?: string,
+    selectedCardIds?: string[],
+  ) => void;
   onTimeout: () => void;
   jsnCard: Card | null;
+  humanPlayer?: PlayerState;
 }
 
 export const ReactionModal: React.FC<ReactionModalProps> = ({
@@ -15,9 +21,11 @@ export const ReactionModal: React.FC<ReactionModalProps> = ({
   onReact,
   onTimeout,
   jsnCard,
+  humanPlayer,
 }) => {
   const { playSound } = useGamifiedAudio();
   const [secondsLeft, setSecondsLeft] = useState(reaction.timerSeconds);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
 
   const playSoundRef = useRef(playSound);
   const onTimeoutRef = useRef(onTimeout);
@@ -35,10 +43,13 @@ export const ReactionModal: React.FC<ReactionModalProps> = ({
 
   useEffect(() => {
     setSecondsLeft(reaction.timerSeconds);
+    setShowPaymentModal(false);
     playSoundRef.current("alertBuzz");
   }, [reactionKey, reaction.timerSeconds]);
 
   useEffect(() => {
+    if (showPaymentModal) return;
+
     intervalRef.current = setInterval(() => {
       setSecondsLeft((prev) => Math.max(0, prev - 1));
     }, 1000);
@@ -48,19 +59,75 @@ export const ReactionModal: React.FC<ReactionModalProps> = ({
         clearInterval(intervalRef.current);
       }
     };
-  }, [reactionKey]);
+  }, [reactionKey, showPaymentModal]);
+
+  const isPaymentAction = [
+    "Rent",
+    "Multi-Rent",
+    "Debt Collector",
+    "Its My Birthday",
+  ].includes(reaction.actionCard.actionType);
 
   useEffect(() => {
+    if (showPaymentModal) return;
+
     if (secondsLeft === 0) {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
-      onTimeoutRef.current();
+      if (isPaymentAction && humanPlayer) {
+        setShowPaymentModal(true);
+      } else {
+        onTimeoutRef.current();
+      }
     } else if (secondsLeft > 0 && secondsLeft < reaction.timerSeconds) {
       playSoundRef.current("timerTick");
     }
-  }, [secondsLeft, reaction.timerSeconds]);
+  }, [
+    secondsLeft,
+    reaction.timerSeconds,
+    isPaymentAction,
+    humanPlayer,
+    showPaymentModal,
+  ]);
+
+  const handleAccept = () => {
+    if (isPaymentAction && humanPlayer) {
+      setShowPaymentModal(true);
+    } else {
+      onReact(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!showPaymentModal) return;
+
+    // Bounded fallback timer for payment selection modal
+    const fallbackTimer = setTimeout(() => {
+      onTimeoutRef.current();
+    }, 30000);
+
+    return () => clearTimeout(fallbackTimer);
+  }, [showPaymentModal]);
+
+  if (showPaymentModal && humanPlayer) {
+    const bankCards = humanPlayer.bank;
+    const propertyCards = humanPlayer.properties.flatMap((s) => s.cards);
+    const amount = reaction.actionDetails.amount || 0;
+
+    return (
+      <PaymentSelectionModal
+        amount={amount}
+        reason={`Action Card: ${reaction.actionCard.name}`}
+        bankCards={bankCards}
+        propertyCards={propertyCards}
+        onConfirmPayment={(selectedCardIds) => {
+          onReact(false, undefined, selectedCardIds);
+        }}
+      />
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
@@ -146,7 +213,7 @@ export const ReactionModal: React.FC<ReactionModalProps> = ({
         {/* Buttons */}
         <div className="grid grid-cols-2 gap-3 relative z-10">
           <button
-            onClick={() => onReact(false)}
+            onClick={handleAccept}
             className="py-2.5 px-3 rounded-xl border border-white/10 text-gray-300 font-bold hover:bg-white/5 transition-all text-xs flex items-center justify-center gap-1"
           >
             <XCircle className="w-3.5 h-3.5" />
