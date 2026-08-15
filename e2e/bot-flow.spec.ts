@@ -2,10 +2,10 @@ import { test, expect } from '@playwright/test';
 
 test('Lobby loads, starts game against bot, and renders bot speech bubble', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('h1')).toContainText('DEAL CLASH');
+  await expect(page.locator('h1')).toContainText('DEAL DECK CLASH');
 
   // Click start game button
-  const startBtn = page.getByRole('button', { name: /Begin Match/i });
+  const startBtn = page.getByRole('button', { name: /QUICK MATCH/i });
   await startBtn.click();
 
   // Wait for boardroom view to render
