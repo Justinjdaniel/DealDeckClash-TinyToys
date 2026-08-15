@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Bot, Sparkles, TrendingUp } from "lucide-react";
 import { BotStyle } from "../../bot/botBrain";
@@ -18,25 +18,37 @@ export const BotSpeechBubble: React.FC<BotSpeechBubbleProps> = ({
   botStyle = "Aggressive",
   botName = "Rich Aunt Bot",
 }) => {
-  if (!commentary && !tacticalExplanation) return null;
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    if (commentary || tacticalExplanation) {
+      setIsVisible(true);
+      const timer = setTimeout(() => {
+        setIsVisible(false);
+      }, 3500);
+      return () => clearTimeout(timer);
+    } else {
+      setIsVisible(false);
+    }
+  }, [commentary, tacticalExplanation, weight]);
 
   return (
-    <div className="relative w-full my-2">
-      <AnimatePresence mode="wait">
+    <AnimatePresence>
+      {isVisible && (commentary || tacticalExplanation) && (
         <motion.div
           key={`${commentary}-${weight}`}
-          initial={{ opacity: 0, scale: 0.95, y: 5 }}
+          initial={{ opacity: 0, scale: 0.85, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: -5 }}
-          transition={{ duration: 0.2 }}
-          className="relative bg-gradient-to-r from-zinc-900/95 via-black/90 to-zinc-900/95 border border-casino-gold/30 backdrop-blur-md rounded-2xl p-3 shadow-lg shadow-black/50"
+          exit={{ opacity: 0, scale: 0.85, y: -10 }}
+          transition={{ duration: 0.3, ease: "easeOut" }}
+          className="absolute top-12 left-2 right-2 z-30 bg-gradient-to-r from-zinc-900/95 via-black/95 to-zinc-900/95 border border-casino-gold/40 backdrop-blur-md rounded-2xl p-3 shadow-2xl shadow-black/80"
         >
-          {/* Pointer tail pointing up */}
-          <div className="absolute -top-2 left-6 w-3 h-3 bg-zinc-900 border-t border-l border-casino-gold/30 transform rotate-45" />
+          {/* Pointer tail pointing up towards Bot Avatar */}
+          <div className="absolute -top-2 left-8 w-3.5 h-3.5 bg-zinc-900 border-t border-l border-casino-gold/40 transform rotate-45" />
 
           <div className="flex items-start gap-2.5">
-            <div className="w-8 h-8 rounded-full bg-red-500/15 border border-red-500/30 flex items-center justify-center flex-shrink-0 text-red-400">
-              <Bot className="w-4 h-4" />
+            <div className="w-8 h-8 rounded-full bg-red-500/20 border border-red-500/40 flex items-center justify-center flex-shrink-0 text-red-400 shadow-inner">
+              <Bot className="w-4 h-4 animate-bounce" />
             </div>
 
             <div className="flex-1 min-w-0">
@@ -54,19 +66,21 @@ export const BotSpeechBubble: React.FC<BotSpeechBubbleProps> = ({
                 )}
               </div>
 
-              <p className="text-xs text-white font-medium italic leading-snug">
-                "{commentary}"
-              </p>
+              {commentary && (
+                <p className="text-xs text-white font-medium italic leading-snug">
+                  "{commentary}"
+                </p>
+              )}
 
               {tacticalExplanation && (
-                <p className="text-[10px] text-gray-400 font-mono mt-1.5 pt-1 border-t border-white/5 truncate">
+                <p className="text-[10px] text-amber-200/80 font-mono mt-1.5 pt-1 border-t border-white/10 truncate">
                   💡 {tacticalExplanation}
                 </p>
               )}
             </div>
           </div>
         </motion.div>
-      </AnimatePresence>
-    </div>
+      )}
+    </AnimatePresence>
   );
 };

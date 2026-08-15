@@ -20,15 +20,15 @@ export const StageWrapper: React.FC<StageWrapperProps> = ({ children }) => {
   };
 
   return (
-    <div className="min-h-screen w-screen bg-slate-950 flex items-center justify-center relative overflow-hidden font-sans">
-      {/* Decorative Background Elements for High-End Desktop Feel */}
+    <div className="w-full h-screen h-[100dvh] bg-slate-950 flex flex-col justify-between overflow-hidden p-2 sm:p-4 relative font-sans">
+      {/* Decorative Background Elements */}
       <div className="absolute top-[-20%] left-[-20%] w-[60%] h-[60%] rounded-full bg-emerald-950/20 blur-[120px] pointer-events-none" />
       <div className="absolute bottom-[-20%] right-[-20%] w-[60%] h-[60%] rounded-full bg-amber-950/20 blur-[120px] pointer-events-none" />
 
       {/* Main Grid Wrapper for Wide Screens */}
-      <div className="w-full max-w-6xl h-screen flex flex-col lg:flex-row items-center justify-center p-0 lg:p-6 gap-6 relative z-10">
-        {/* Left Informative Panel: Hidden on Mobile */}
-        <div className="hidden lg:flex flex-col justify-between w-72 h-[100dvh] max-h-[820px] glass-panel rounded-3xl p-6 border border-casino-gold/10 text-left">
+      <div className="w-full h-full flex-1 min-h-0 flex items-center justify-center gap-4 relative z-10">
+        {/* Left Informative Panel: Hidden on Mobile / Tablet */}
+        <div className="hidden xl:flex flex-col justify-between w-64 h-full glass-panel rounded-2xl p-5 border border-casino-gold/10 text-left flex-shrink-0">
           <div>
             <div className="flex items-center gap-2 mb-4">
               <Gamepad2 className="text-casino-gold w-6 h-6 animate-pulse" />
@@ -70,13 +70,13 @@ export const StageWrapper: React.FC<StageWrapperProps> = ({ children }) => {
           </div>
         </div>
 
-        {/* Center Mobile Viewport Stage Container */}
-        <div className="w-full max-w-md h-[100dvh] max-h-[850px] shadow-2xl relative overflow-hidden rounded-none lg:rounded-[36px] border-none lg:border-4 lg:border-zinc-800">
+        {/* Center Game Stage Container: Fills remaining space dynamically */}
+        <div className="w-full h-full flex-1 min-h-0 flex flex-col relative overflow-hidden">
           {children}
         </div>
 
-        {/* Right Settings Panel: Hidden on Mobile */}
-        <div className="hidden lg:flex flex-col justify-between w-72 h-[100dvh] max-h-[820px] glass-panel rounded-3xl p-6 border border-casino-gold/10 text-left">
+        {/* Right Settings Panel: Hidden on Mobile / Tablet */}
+        <div className="hidden xl:flex flex-col justify-between w-64 h-full glass-panel rounded-2xl p-5 border border-casino-gold/10 text-left flex-shrink-0">
           <div className="space-y-6">
             <div className="flex items-center gap-2 border-b border-casino-gold/10 pb-3">
               <HelpCircle className="text-casino-gold w-5 h-5" />

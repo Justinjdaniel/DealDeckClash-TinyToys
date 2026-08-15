@@ -17,6 +17,9 @@ import {
   RefreshCw,
   ArrowUp,
   Play,
+  FileText,
+  X,
+  Layers,
 } from "lucide-react";
 import confetti from "canvas-confetti";
 import { useGamifiedAudio } from "../audio/AudioContext";
@@ -59,11 +62,13 @@ export const Board: React.FC<BoardProps> = ({
 
   const victoryTriggeredRef = useRef(false);
 
+  const [logsOpen, setLogsOpen] = useState(false);
+
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [targetSelectOpen, setTargetSelectOpen] = useState(false);
   const [targetOptions, setTargetOptions] = useState<{
     type: string;
-    options: { label: string; value: string }[];
+    options: { label: string; value: string; card?: Card; color?: CardColor }[];
     extra?: { opponentCardId: string };
   } | null>(null);
   const [selectedTargetOption, setSelectedTargetOption] = useState<
@@ -86,6 +91,42 @@ export const Board: React.FC<BoardProps> = ({
     botStyle,
     playSound,
   });
+
+  // Auto-end turn transition when 0 action points remain for human player
+  useEffect(() => {
+    if (
+      !human ||
+      !isHumanTurn ||
+      state.status !== "PLAYING" ||
+      state.actionPointsLeft > 0 ||
+      state.reactionQueue !== null ||
+      actionMenuOpen ||
+      targetSelectOpen ||
+      wildcardSelectorOpen
+    ) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      onDispatch({
+        type: "END_TURN",
+        payload: { playerId: human.id },
+      });
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [
+    isHumanTurn,
+    state.status,
+    state.actionPointsLeft,
+    state.reactionQueue,
+    actionMenuOpen,
+    targetSelectOpen,
+    wildcardSelectorOpen,
+    human?.id,
+    onDispatch,
+    human,
+  ]);
 
   // Trigger win or lose celebration once
   useEffect(() => {
@@ -212,6 +253,7 @@ export const Board: React.FC<BoardProps> = ({
           options: targetProps.map((c) => ({
             label: `Steal ${c.name}`,
             value: c.id,
+            card: c,
           })),
         });
         setTargetSelectOpen(true);
@@ -235,6 +277,7 @@ export const Board: React.FC<BoardProps> = ({
           options: botProps.map((c) => ({
             label: `Steal ${c.name}`,
             value: c.id,
+            card: c,
           })),
         });
         setTargetSelectOpen(true);
@@ -252,6 +295,8 @@ export const Board: React.FC<BoardProps> = ({
           options: completeSets.map((s) => ({
             label: `Steal completed ${s.color} set`,
             value: s.color,
+            card: s.cards[0],
+            color: s.color,
           })),
         });
         setTargetSelectOpen(true);
@@ -277,7 +322,15 @@ export const Board: React.FC<BoardProps> = ({
       if (choices.length > 0) {
         setTargetOptions({
           type: "RENT_COLOR",
-          options: choices.map((c) => ({ label: `Rent on ${c}`, value: c })),
+          options: choices.map((c) => {
+            const matchingSet = human.properties.find((s) => s.color === c);
+            return {
+              label: `Rent on ${c}`,
+              value: c,
+              color: c,
+              card: matchingSet?.cards[0],
+            };
+          }),
         });
         setTargetSelectOpen(true);
         setActionMenuOpen(false);
@@ -351,6 +404,7 @@ export const Board: React.FC<BoardProps> = ({
         options: myProps.map((c) => ({
           label: `Swap with ${c.name}`,
           value: c.id,
+          card: c,
         })),
         extra: { opponentCardId: selectedTargetOption },
       });
@@ -434,19 +488,34 @@ export const Board: React.FC<BoardProps> = ({
     });
   };
 
+  const topDiscardCard = state.discardPile[0] || null;
+
   return (
     <div className="w-full h-full flex flex-col justify-between overflow-hidden relative text-left">
-      {/* Dynamic HUD header */}
-      <div className="px-4 py-2 bg-black/40 border-b border-casino-gold/15 flex items-center justify-between relative z-20">
-        <div className="flex items-center gap-1.5">
+      {/* Top HUD Header */}
+      <div className="px-3 sm:px-4 py-2 bg-black/50 border-b border-casino-gold/20 flex items-center justify-between relative z-20 backdrop-blur-md">
+        <div className="flex items-center gap-2">
           <Sparkles className="text-casino-gold w-4 h-4 animate-pulse" />
-          <span className="font-serif font-black text-white text-sm">
+          <span className="font-serif font-black text-white text-xs sm:text-sm">
             Boardroom
           </span>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="text-[10px] font-mono font-bold text-gray-300">
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* Collapsible Game Log Drawer Badge Button */}
+          <button
+            onClick={() => {
+              playSound("click");
+              setLogsOpen(true);
+            }}
+            className="px-2.5 py-1 bg-casino-gold/10 hover:bg-casino-gold/20 text-casino-gold border border-casino-gold/30 rounded-lg text-[10px] font-mono font-bold flex items-center gap-1.5 transition-all hover:scale-105"
+            title="View Game Console Logs"
+          >
+            <FileText className="w-3 h-3" />
+            <span>📜 Logs [{state.logs.length}]</span>
+          </button>
+
+          <div className="text-[10px] font-mono font-bold text-gray-300 bg-white/5 px-2 py-1 rounded-lg border border-white/10">
             ACTIONS:{" "}
             <span
               className={`text-xs font-black ${state.actionPointsLeft > 0 ? "text-green-400" : "text-red-400"}`}
@@ -469,190 +538,252 @@ export const Board: React.FC<BoardProps> = ({
       </div>
 
       {/* Embedded XP Progression Bar */}
-      <div className="px-4 py-2 relative z-20 bg-slate-900/40 border-b border-casino-gold/5 flex justify-center">
+      <div className="px-3 sm:px-4 py-1.5 relative z-20 bg-slate-900/60 border-b border-casino-gold/10 flex justify-center backdrop-blur-sm">
         <XPBar xp={xp} level={level} streak={streak} />
       </div>
 
-      {/* Main Board scrolling grid view */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 pr-1 relative z-10 scrollbar-none">
+      {/* Main Game Table Container */}
+      <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-4 relative z-10 scrollbar-none min-h-0">
         {/* BOT AI SECTION */}
-        <div className="p-3 bg-black/35 rounded-xl border border-white/5 relative">
-          <div className="flex items-center justify-between border-b border-white/5 pb-2 mb-3">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center font-serif text-red-400 text-xs font-bold">
+        <div className="p-3 bg-black/40 rounded-2xl border border-white/10 relative shadow-lg">
+          <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-full bg-red-500/20 border border-red-500/40 flex items-center justify-center font-serif text-red-400 text-xs font-bold shadow-inner">
                 AI
               </div>
               <div>
-                <h4 className="text-xs font-black text-white leading-none">
+                <h4 className="text-xs font-black text-white leading-none flex items-center gap-1.5">
                   Rich Aunt Bot
+                  {!isHumanTurn && (
+                    <span className="text-[9px] bg-red-500/20 text-red-400 font-mono px-1.5 py-0.5 rounded animate-pulse">
+                      PLAYING...
+                    </span>
+                  )}
                 </h4>
-                <span className="text-[9px] text-gray-400 font-mono">
-                  Vault: {bot.bank.reduce((acc, c) => acc + c.value, 0)}M
+                <span className="text-[10px] text-gray-400 font-mono">
+                  Vault: {bot.bank.reduce((acc, c) => acc + c.value, 0)}M Cash
                 </span>
               </div>
             </div>
 
-            <span className="text-[9px] bg-red-500/15 text-red-400 font-mono font-bold px-2 py-0.5 rounded-full">
-              {bot.hand.length} Hand Cards
-            </span>
+            {/* Fanned / Stacked Face-down Bot Hand Cards */}
+            <div className="flex items-center gap-1">
+              <span className="text-[9px] text-gray-400 font-mono font-bold mr-1">
+                Hand ({bot.hand.length}):
+              </span>
+              <div className="flex -space-x-3 items-center">
+                {bot.hand.map((card, idx) => (
+                  <div
+                    key={card.id || idx}
+                    className="w-6 h-9 sm:w-7 sm:h-10 rounded overflow-hidden shadow-md border border-casino-gold/30 transform hover:-translate-y-1 transition-transform"
+                  >
+                    <PlayingCard card={card} isFlipped={true} />
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
-          {/* Bot Tactical Speech Bubble */}
+          {/* Floating Bot Commentary Popover */}
           <BotSpeechBubble
-            commentary={
-              botCommentary ||
-              "Welcome to Deal Deck Clash. Prepare your best moves."
-            }
+            commentary={botCommentary}
             weight={botWeight}
             tacticalExplanation={tacticalExplanation}
             botStyle={botStyle}
             botName={bot.name}
           />
 
-          {/* AI Property Sets */}
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            {bot.properties.map((set) => {
-              if (set.cards.length === 0) return null;
-              return (
-                <div
-                  key={set.color}
-                  className="p-2 bg-black/25 rounded-lg border border-white/5 flex flex-col justify-between h-20 relative"
-                >
-                  <div
-                    className="w-full h-1 rounded"
-                    style={{ backgroundColor: COLOR_HEX[set.color] }}
-                  />
-                  <span className="text-[9px] text-white font-bold font-mono truncate">
-                    {set.color} Set
-                  </span>
-                  <span className="text-[8px] text-gray-400 font-bold">
-                    {set.cards.length} Cards
-                  </span>
-                  {set.isComplete && (
-                    <span className="absolute top-1 right-1 bg-casino-gold text-casino-felt text-[7px] font-black px-1 rounded uppercase">
-                      Complete
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Console Action Log */}
-        <div className="p-2.5 bg-black/30 rounded-xl border border-white/5 flex flex-col justify-between h-24">
-          <span className="text-[8px] text-casino-gold font-bold uppercase tracking-wider block border-b border-white/5 pb-1">
-            Board console logs
-          </span>
-          <div className="flex-1 overflow-y-auto space-y-1 mt-1 text-[8px] font-mono text-gray-400 leading-tight">
-            {state.logs.slice(0, 5).map((log, i) => (
-              <div
-                key={i}
-                className="truncate border-b border-white/5 pb-0.5 last:border-none"
-              >
-                {log}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* HUMAN PLAYERS ASSETS */}
-        <div className="p-3 bg-black/35 rounded-xl border border-white/5 relative space-y-3">
-          <h4 className="text-xs font-serif font-bold text-white border-b border-white/5 pb-1 flex justify-between">
-            <span>Your Boardroom Assets</span>
-            <span className="text-casino-gold font-mono">
-              Bank: {human.bank.reduce((acc, c) => acc + c.value, 0)}M Cash
+          {/* Bot Visual Bank Cards Zone */}
+          <div className="mb-3">
+            <span className="text-[9px] uppercase font-bold text-casino-gold tracking-widest block mb-1">
+              Bot Bank ({bot.bank.length} cards)
             </span>
-          </h4>
-
-          {/* Cash Vault */}
-          <div className="p-2 bg-black/25 rounded-lg border border-white/5">
-            <span className="text-[8px] uppercase font-bold text-casino-gold tracking-widest block mb-1">
-              Liquid Bank Cash
-            </span>
-            {human.bank.length > 0 ? (
-              <div className="flex flex-wrap gap-1">
-                {human.bank.map((card) => (
-                  <div
-                    key={card.id}
-                    className="px-2 py-1 bg-green-950/40 border border-green-500/20 rounded-md text-[9px] font-mono text-white flex items-center gap-1"
-                  >
-                    <Coins className="w-3 h-3 text-green-400" />
-                    <span>{card.value}M</span>
+            {bot.bank.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {bot.bank.map((card) => (
+                  <div key={card.id} className="w-12 h-16 flex-shrink-0">
+                    <PlayingCard card={card} />
                   </div>
                 ))}
               </div>
             ) : (
               <span className="text-[9px] text-gray-500 italic block">
-                No cash banked. Complete rent triggers will auto-liquidate
-                properties!
+                Bot bank empty
               </span>
             )}
           </div>
 
-          {/* Properties */}
-          <div className="space-y-1.5">
-            <span className="text-[8px] uppercase font-bold text-casino-gold tracking-widest block">
+          {/* Bot Visual Property Sets Zone */}
+          <div>
+            <span className="text-[9px] uppercase font-bold text-casino-gold tracking-widest block mb-1">
+              Bot Property Sets
+            </span>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {bot.properties.map((set) => {
+                if (set.cards.length === 0) return null;
+                return (
+                  <div
+                    key={set.color}
+                    className="p-2 bg-black/40 rounded-xl border border-white/10 flex flex-col justify-between relative shadow-md"
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <div
+                        className="h-1.5 rounded-full flex-1 mr-2"
+                        style={{ backgroundColor: COLOR_HEX[set.color] }}
+                      />
+                      {set.isComplete && (
+                        <span className="bg-casino-gold text-black text-[7px] font-black px-1 rounded uppercase">
+                          Complete
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {set.cards.map((card) => (
+                        <div key={card.id} className="w-10 h-14 flex-shrink-0">
+                          <PlayingCard card={card} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* CENTER TABLE PLAY ZONE: DECK & DISCARD PILE VISUAL RENDERING */}
+        <div className="p-3 bg-black/30 rounded-2xl border border-casino-gold/10 flex items-center justify-around shadow-inner">
+          <div className="flex flex-col items-center">
+            <span className="text-[8px] font-mono text-gray-400 uppercase tracking-wider mb-1">
+              Draw Deck ({state.deck.length})
+            </span>
+            <div className="w-14 h-20 relative">
+              {state.deck.length > 0 ? (
+                <div className="w-full h-full rounded-xl overflow-hidden shadow-gold-glow border border-casino-gold/40">
+                  <PlayingCard card={state.deck[0]} isFlipped={true} />
+                </div>
+              ) : (
+                <div className="w-full h-full rounded-xl border border-dashed border-gray-600 flex items-center justify-center text-[9px] text-gray-500">
+                  Empty
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-col items-center">
+            <span className="text-[8px] font-mono text-gray-400 uppercase tracking-wider mb-1">
+              Center Discard Pile ({state.discardPile.length})
+            </span>
+            <div className="w-14 h-20 relative">
+              {topDiscardCard ? (
+                <div className="w-full h-full rounded-xl overflow-hidden shadow-lg border border-white/20">
+                  <PlayingCard card={topDiscardCard} />
+                </div>
+              ) : (
+                <div className="w-full h-full rounded-xl border border-dashed border-gray-600 flex items-center justify-center text-[9px] text-gray-500">
+                  <Layers className="w-4 h-4 text-gray-600" />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* HUMAN PLAYER ASSETS */}
+        <div className="p-3 bg-black/40 rounded-2xl border border-white/10 relative space-y-3 shadow-lg">
+          <h4 className="text-xs font-serif font-bold text-white border-b border-white/10 pb-1.5 flex justify-between items-center">
+            <span className="flex items-center gap-1.5">
+              <span>Your Boardroom Assets</span>
+              {isHumanTurn && (
+                <span className="text-[9px] bg-green-500/20 text-green-400 font-mono px-1.5 py-0.5 rounded font-bold animate-pulse">
+                  YOUR TURN
+                </span>
+              )}
+            </span>
+            <span className="text-casino-gold font-mono text-xs font-bold">
+              Bank: {human.bank.reduce((acc, c) => acc + c.value, 0)}M Cash
+            </span>
+          </h4>
+
+          {/* Liquid Cash Bank Zone */}
+          <div>
+            <span className="text-[9px] uppercase font-bold text-casino-gold tracking-widest block mb-1">
+              Liquid Bank Cash
+            </span>
+            {human.bank.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {human.bank.map((card) => (
+                  <div key={card.id} className="w-12 h-16 flex-shrink-0">
+                    <PlayingCard card={card} />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <span className="text-[9px] text-gray-500 italic block">
+                No cash banked. Rent charges will forfeit property cards!
+              </span>
+            )}
+          </div>
+
+          {/* Player Property Sets Zone */}
+          <div>
+            <span className="text-[9px] uppercase font-bold text-casino-gold tracking-widest block mb-1">
               Your Property Sets
             </span>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {human.properties.map((set) => {
                 if (set.cards.length === 0) return null;
                 return (
                   <div
                     key={set.color}
-                    className="p-2 bg-black/25 rounded-lg border border-white/5 flex flex-col justify-between h-20 relative"
+                    className="p-2 bg-black/40 rounded-xl border border-white/10 flex flex-col justify-between relative shadow-md"
                   >
-                    <div
-                      className="w-full h-1 rounded"
-                      style={{ backgroundColor: COLOR_HEX[set.color] }}
-                    />
-                    <span className="text-[9px] text-white font-bold font-mono truncate">
-                      {set.color} Set
-                    </span>
-                    <span className="text-[8px] text-gray-400 font-bold">
-                      {set.cards.length} Cards in play
-                    </span>
-                    {set.isComplete && (
-                      <span className="absolute top-1 right-1 bg-casino-gold text-casino-felt text-[7px] font-black px-1 rounded uppercase">
-                        Complete
-                      </span>
-                    )}
+                    <div className="flex items-center justify-between mb-1">
+                      <div
+                        className="h-1.5 rounded-full flex-1 mr-2"
+                        style={{ backgroundColor: COLOR_HEX[set.color] }}
+                      />
+                      {set.isComplete && (
+                        <span className="bg-casino-gold text-black text-[7px] font-black px-1 rounded uppercase">
+                          Complete
+                        </span>
+                      )}
+                    </div>
 
-                    {/* Interactive Wildcards */}
-                    {set.cards.some((c) => c.type === "Wildcard") && (
-                      <div className="mt-1 flex gap-1">
-                        {set.cards
-                          .filter((c) => c.type === "Wildcard")
-                          .map((card) => {
-                            const wild = card as WildcardCard;
-                            return (
-                              <button
-                                key={wild.id}
-                                onClick={() => {
-                                  playSound("click");
-                                  const nextCol = wild.colors.find(
-                                    (c) => c !== set.color && c !== "Any",
-                                  );
-                                  if (nextCol) {
-                                    onDispatch({
-                                      type: "TOGGLE_WILDCARD_COLOR",
-                                      payload: {
-                                        playerId: human.id,
-                                        cardId: wild.id,
-                                        color: nextCol,
-                                      },
-                                    });
-                                  }
-                                }}
-                                className="text-[7px] uppercase bg-casino-gold/10 hover:bg-casino-gold/30 border border-casino-gold/20 text-casino-gold px-1 rounded font-bold"
-                              >
-                                Flip
-                              </button>
-                            );
-                          })}
-                      </div>
-                    )}
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {set.cards.map((card) => (
+                        <div
+                          key={card.id}
+                          className="w-11 h-16 flex-shrink-0 relative group"
+                        >
+                          <PlayingCard card={card} />
+                          {card.type === "Wildcard" && (
+                            <button
+                              onClick={() => {
+                                playSound("click");
+                                const wild = card as WildcardCard;
+                                const nextCol = wild.colors.find(
+                                  (c) => c !== set.color && c !== "Any",
+                                );
+                                if (nextCol) {
+                                  onDispatch({
+                                    type: "TOGGLE_WILDCARD_COLOR",
+                                    payload: {
+                                      playerId: human.id,
+                                      cardId: wild.id,
+                                      color: nextCol,
+                                    },
+                                  });
+                                }
+                              }}
+                              className="absolute -top-1 -right-1 bg-casino-gold text-black text-[7px] font-black px-1 rounded shadow hover:scale-110 transition-transform z-10"
+                              title="Flip Wildcard Color"
+                            >
+                              Flip
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 );
               })}
@@ -661,67 +792,78 @@ export const Board: React.FC<BoardProps> = ({
         </div>
       </div>
 
-      {/* PLAYER HAND DISCARD OVERLAY */}
+      {/* DISCARD OVERFLOW MODAL VIEW */}
       {state.status === "DISCARDING" &&
         state.pendingDiscardPlayerId === human.id && (
-          <div className="absolute inset-x-0 bottom-0 bg-red-950/95 backdrop-blur-md border-t border-red-500/30 z-40 py-4 px-3 flex flex-col items-center">
-            <div className="text-center mb-2 flex items-center gap-1">
-              <AlertTriangle className="text-red-400 animate-bounce w-4 h-4" />
-              <span className="text-[11px] font-bold text-red-200">
-                DISCARD EXCEEDED: Discard hand down to 7 cards!
-              </span>
-            </div>
-            <div className="flex flex-wrap justify-center gap-1.5">
-              {human.hand.map((card) => (
-                <button
-                  key={card.id}
-                  onClick={() => {
-                    playSound("cardSweep");
-                    onDispatch({
-                      type: "DISCARD_OVERFLOW",
-                      payload: { playerId: human.id, cardIds: [card.id] },
-                    });
-                  }}
-                  className="px-2.5 py-1 bg-red-900/40 hover:bg-red-900 border border-red-500/20 rounded-lg text-[10px] font-bold text-white transition-all"
-                >
-                  Discard {card.name}
-                </button>
-              ))}
+          <div className="absolute inset-x-0 bottom-0 top-0 bg-black/85 backdrop-blur-md z-40 p-4 flex flex-col items-center justify-center animate-[scaleIn_0.2s_ease-out]">
+            <div className="max-w-md w-full bg-red-950/90 border border-red-500/40 rounded-2xl p-4 shadow-2xl flex flex-col items-center">
+              <div className="text-center mb-3 flex items-center gap-1.5">
+                <AlertTriangle className="text-red-400 animate-bounce w-5 h-5" />
+                <span className="text-xs sm:text-sm font-black text-red-200">
+                  HAND LIMIT EXCEEDED: Discard down to 7 cards!
+                </span>
+              </div>
+              <p className="text-[10px] text-red-300 text-center mb-3">
+                Tap cards below to discard from hand ({human.hand.length}/7):
+              </p>
+              <div className="flex flex-wrap justify-center gap-2 max-h-[220px] overflow-y-auto p-1">
+                {human.hand.map((card) => (
+                  <div
+                    key={card.id}
+                    className="w-14 h-20 flex-shrink-0 relative"
+                  >
+                    <PlayingCard
+                      card={card}
+                      onClick={() => {
+                        playSound("cardSweep");
+                        onDispatch({
+                          type: "DISCARD_OVERFLOW",
+                          payload: { playerId: human.id, cardIds: [card.id] },
+                        });
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
 
-      {/* PLAYER PORTABLE PRIVATE HAND DRAWER TRAY */}
-      <div className="px-4 py-3 bg-black/40 border-t border-casino-gold/15 flex flex-col items-center relative z-20">
+      {/* PLAYER PRIVATE HAND & CONTROLS FOOTER */}
+      <div className="px-3 sm:px-4 py-2.5 bg-black/60 border-t border-casino-gold/20 flex flex-col items-center relative z-20 backdrop-blur-md">
         <div className="flex justify-between w-full items-center mb-2">
-          <span className="text-[8px] font-bold uppercase tracking-widest text-casino-gold">
-            Private Hand Deck ({human.hand.length}/7)
+          <span className="text-[9px] font-mono font-bold uppercase tracking-widest text-casino-gold flex items-center gap-1">
+            Private Hand ({human.hand.length}/7)
           </span>
+
+          {/* Prominent Gamified Manual End Turn Button */}
           <button
             onClick={handleEndTurn}
             disabled={!isHumanTurn || state.status !== "PLAYING"}
-            className={`py-1.5 px-3 rounded-lg text-[9px] font-bold font-mono flex items-center gap-1 transition-all ${
+            className={`py-1.5 px-3 sm:px-4 rounded-xl text-[10px] sm:text-xs font-serif font-black flex items-center gap-1.5 transition-all shadow-lg ${
               isHumanTurn && state.status === "PLAYING"
-                ? "bg-gradient-to-r from-casino-goldDark to-casino-gold text-casino-felt shadow-gold-glow hover:scale-[1.02]"
-                : "bg-white/5 text-gray-500 cursor-not-allowed border border-white/5"
+                ? "bg-gradient-to-r from-amber-500 via-casino-gold to-yellow-400 text-black shadow-gold-glow hover:scale-105 active:scale-95 animate-pulse"
+                : "bg-white/10 text-gray-500 cursor-not-allowed border border-white/5"
             }`}
           >
-            <RefreshCw className="w-3 h-3" />
+            <RefreshCw className="w-3.5 h-3.5" />
             End Turn
           </button>
         </div>
 
-        {/* Fanned flex card queue row */}
-        <div className="w-full flex overflow-x-auto gap-2 py-1 scrollbar-none items-center justify-start min-h-[140px]">
+        {/* Fanned flex card hand queue */}
+        <div className="w-full flex overflow-x-auto gap-2 py-1 scrollbar-none items-center justify-start min-h-[120px] sm:min-h-[140px]">
           {human.hand.map((card) => {
             const isSelected = selectedHandCard?.id === card.id;
             return (
-              <div key={card.id} className="w-20 h-28 flex-shrink-0">
+              <div
+                key={card.id}
+                className="w-16 h-24 sm:w-20 sm:h-28 flex-shrink-0"
+              >
                 <PlayingCard
                   card={card}
                   isSelected={isSelected}
                   onClick={() => handleHandCardClick(card)}
-                  className="w-full h-full"
                 />
               </div>
             );
@@ -729,24 +871,61 @@ export const Board: React.FC<BoardProps> = ({
         </div>
       </div>
 
-      {/* Dynamic Action Menus & selectors */}
+      {/* CONSOLE LOGS DRAWER POPUP */}
+      {logsOpen && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="max-w-md w-full glass-panel rounded-2xl p-4 border border-casino-gold/40 shadow-2xl flex flex-col h-[350px] animate-[scaleIn_0.15s_ease-out]">
+            <div className="flex items-center justify-between border-b border-casino-gold/20 pb-2 mb-2">
+              <div className="flex items-center gap-2">
+                <FileText className="text-casino-gold w-4 h-4" />
+                <h3 className="text-sm font-serif font-bold text-white">
+                  Board Console Logs
+                </h3>
+              </div>
+              <button
+                onClick={() => setLogsOpen(false)}
+                className="p-1 text-gray-400 hover:text-white rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto space-y-1.5 text-[10px] font-mono text-gray-300 pr-1 leading-relaxed">
+              {state.logs.map((log, i) => (
+                <div
+                  key={i}
+                  className="p-1.5 bg-black/40 rounded border border-white/5 text-gray-300"
+                >
+                  {log}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ACTION DEPLOYMENT SELECTION MENU */}
       {actionMenuOpen && selectedHandCard && (
-        <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="max-w-sm w-full glass-panel rounded-2xl p-5 border border-casino-gold/40 shadow-gold-glow animate-[scaleIn_0.15s_ease-out]">
+        <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="max-w-sm w-full glass-panel rounded-2xl p-5 border border-casino-gold/40 shadow-gold-glow animate-[scaleIn_0.15s_ease-out] flex flex-col items-center">
+            {/* Visual Preview of selected card */}
+            <div className="w-20 h-28 mb-3">
+              <PlayingCard card={selectedHandCard} />
+            </div>
+
             <h3 className="text-base font-serif font-black text-white text-center mb-1">
               {selectedHandCard.name}
             </h3>
-            <p className="text-[10px] text-gray-400 text-center mb-4 leading-normal">
-              Deploy this asset onto the boardroom field.
+            <p className="text-[10px] text-gray-300 text-center mb-4 leading-normal">
+              Choose how to deploy this card onto the boardroom.
             </p>
 
-            <div className="space-y-2">
+            <div className="space-y-2 w-full">
               {selectedHandCard.type === "Money" && (
                 <button
                   onClick={(e) => handlePlayToBank(e)}
-                  className="w-full py-2.5 bg-casino-gold text-casino-felt font-bold text-xs rounded-xl flex items-center justify-center gap-1 hover:scale-[1.02] transition-all"
+                  className="w-full py-2.5 bg-casino-gold text-casino-felt font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 hover:scale-[1.02] active:scale-95 transition-all shadow-md"
                 >
-                  <Coins className="w-3.5 h-3.5" />
+                  <Coins className="w-4 h-4" />
                   Deposit Cash into Bank
                 </button>
               )}
@@ -755,9 +934,9 @@ export const Board: React.FC<BoardProps> = ({
                 selectedHandCard.type === "Wildcard") && (
                 <button
                   onClick={(e) => handlePlayToProperties(e)}
-                  className="w-full py-2.5 bg-casino-gold text-casino-felt font-bold text-xs rounded-xl flex items-center justify-center gap-1 hover:scale-[1.02] transition-all"
+                  className="w-full py-2.5 bg-casino-gold text-casino-felt font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 hover:scale-[1.02] active:scale-95 transition-all shadow-md"
                 >
-                  <ArrowUp className="w-3.5 h-3.5" />
+                  <ArrowUp className="w-4 h-4" />
                   Build Property Zone
                 </button>
               )}
@@ -766,17 +945,17 @@ export const Board: React.FC<BoardProps> = ({
                 <>
                   <button
                     onClick={handlePlayAction}
-                    className="w-full py-2.5 bg-casino-gold text-casino-felt font-bold text-xs rounded-xl flex items-center justify-center gap-1 hover:scale-[1.02] transition-all"
+                    className="w-full py-2.5 bg-casino-gold text-casino-felt font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 hover:scale-[1.02] active:scale-95 transition-all shadow-md"
                   >
-                    <Play className="w-3.5 h-3.5 fill-current" />
-                    Play Action Card
+                    <Play className="w-4 h-4 fill-current" />
+                    Play Action Card Effect
                   </button>
                   <button
                     onClick={(e) => handlePlayToBank(e)}
-                    className="w-full py-2.5 border border-casino-gold/30 hover:border-casino-gold text-casino-gold font-bold text-xs rounded-xl flex items-center justify-center gap-1 hover:bg-casino-gold/5 transition-all"
+                    className="w-full py-2.5 border border-casino-gold/40 hover:border-casino-gold text-casino-gold font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 hover:bg-casino-gold/10 transition-all"
                   >
-                    <Coins className="w-3.5 h-3.5" />
-                    Deposit Cash face value
+                    <Coins className="w-4 h-4" />
+                    Deposit Cash face value ({selectedHandCard.value}M)
                   </button>
                 </>
               )}
@@ -786,7 +965,7 @@ export const Board: React.FC<BoardProps> = ({
                   setSelectedHandCard(null);
                   setActionMenuOpen(false);
                 }}
-                className="w-full py-2 border border-white/10 text-gray-400 font-bold text-[10px] rounded-xl"
+                className="w-full py-2 border border-white/10 text-gray-400 font-bold text-[10px] rounded-xl hover:bg-white/5 transition-colors"
               >
                 Cancel Selection
               </button>
@@ -795,34 +974,53 @@ export const Board: React.FC<BoardProps> = ({
         </div>
       )}
 
-      {/* Target modal */}
+      {/* TARGET SELECTION MODAL WITH FULL VISUAL CARDS */}
       {targetSelectOpen && targetOptions && (
-        <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="max-w-sm w-full glass-panel rounded-2xl p-5 border border-casino-gold/40 shadow-gold-glow animate-[scaleIn_0.15s_ease-out]">
+        <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="max-w-md w-full glass-panel rounded-2xl p-5 border border-casino-gold/40 shadow-gold-glow animate-[scaleIn_0.15s_ease-out]">
             <h3 className="text-sm font-serif font-black text-white text-center mb-1">
-              SPECIFY TARGET
+              SPECIFY TARGET CARD
             </h3>
-            <p className="text-[9px] text-gray-400 text-center mb-4 leading-normal">
-              Choose opponent cards or sets to execute this attack.
+            <p className="text-[10px] text-gray-300 text-center mb-4 leading-normal">
+              Select target property card or set to execute play.
             </p>
 
-            <div className="space-y-1.5 mb-4 max-h-[160px] overflow-y-auto">
+            <div className="flex flex-wrap justify-center gap-3 mb-4 max-h-[220px] overflow-y-auto p-1">
               {targetOptions.options.map((opt) => (
-                <button
+                <div
                   key={opt.value}
                   onClick={() => {
                     playSound("click");
                     setSelectedTargetOption(opt.value);
                   }}
-                  className={`w-full text-left p-2.5 rounded-xl border font-bold text-[11px] transition-all flex items-center justify-between ${
+                  className={`w-16 h-24 flex-shrink-0 cursor-pointer rounded-xl transition-all transform hover:scale-105 relative ${
                     selectedTargetOption === opt.value
-                      ? "border-casino-gold bg-casino-gold/15 text-white shadow-gold-glow"
-                      : "border-white/10 bg-black/20 text-gray-300 hover:bg-white/5"
+                      ? "ring-4 ring-casino-gold shadow-gold-glow scale-105"
+                      : "opacity-80 hover:opacity-100"
                   }`}
                 >
-                  <span>{opt.label}</span>
-                  {selectedTargetOption === opt.value && <span>✓</span>}
-                </button>
+                  {opt.card ? (
+                    <PlayingCard card={opt.card} />
+                  ) : (
+                    <div
+                      className="w-full h-full rounded-xl border border-casino-gold/40 flex flex-col items-center justify-between p-1.5 text-center bg-black/60"
+                      style={{
+                        borderTop: opt.color
+                          ? `4px solid ${COLOR_HEX[opt.color]}`
+                          : undefined,
+                      }}
+                    >
+                      <span className="text-[8px] font-mono font-bold text-white leading-tight">
+                        {opt.label}
+                      </span>
+                    </div>
+                  )}
+                  {selectedTargetOption === opt.value && (
+                    <div className="absolute -top-1 -right-1 bg-casino-gold text-black rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-black z-20">
+                      ✓
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
 
@@ -834,14 +1032,14 @@ export const Board: React.FC<BoardProps> = ({
                   setTargetOptions(null);
                   setTargetSelectOpen(false);
                 }}
-                className="py-2.5 border border-white/10 text-gray-400 font-bold text-[10px] rounded-xl"
+                className="py-2.5 border border-white/10 text-gray-400 font-bold text-[10px] rounded-xl hover:bg-white/5"
               >
                 Cancel
               </button>
               <button
                 onClick={(e) => handleTargetConfirm(e)}
                 disabled={!selectedTargetOption}
-                className="py-2.5 bg-casino-gold text-casino-felt font-bold text-[10px] rounded-xl disabled:opacity-40"
+                className="py-2.5 bg-casino-gold text-casino-felt font-bold text-[10px] rounded-xl disabled:opacity-40 hover:scale-[1.02] active:scale-95 transition-all"
               >
                 Confirm Target
               </button>
@@ -850,18 +1048,18 @@ export const Board: React.FC<BoardProps> = ({
         </div>
       )}
 
-      {/* Wildcard custom color assignment */}
+      {/* WILDCARD COLOR SELECTION MODAL */}
       {wildcardSelectorOpen && activeWildcard && (
-        <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="max-w-sm w-full glass-panel rounded-2xl p-5 border border-casino-gold/40 shadow-gold-glow animate-[scaleIn_0.15s_ease-out]">
             <h3 className="text-sm font-serif font-black text-white text-center mb-1">
-              WILDCARD TUNING
+              WILDCARD COLOR TUNING
             </h3>
-            <p className="text-[9px] text-gray-400 text-center mb-4 leading-normal">
-              Choose the property color set to assign this wildcard to.
+            <p className="text-[10px] text-gray-300 text-center mb-4 leading-normal">
+              Select property color set to assign this wildcard to.
             </p>
 
-            <div className="grid grid-cols-2 gap-1.5 mb-4 max-h-[180px] overflow-y-auto pr-1">
+            <div className="grid grid-cols-2 gap-2 mb-4 max-h-[200px] overflow-y-auto pr-1">
               {activeWildcard.colors.includes("Any")
                 ? [
                     "Brown",
@@ -880,22 +1078,28 @@ export const Board: React.FC<BoardProps> = ({
                       onClick={(e) =>
                         handleWildcardColorSelect(col as CardColor, e)
                       }
-                      className="py-2 rounded-xl border border-white/10 font-bold text-[10px] text-white hover:bg-white/5 text-left pl-3"
+                      className="py-2.5 px-3 rounded-xl border border-white/10 font-bold text-[10px] text-white hover:bg-white/10 transition-all flex items-center justify-between"
                       style={{
-                        borderLeft: `4px solid ${COLOR_HEX[col as CardColor]}`,
+                        borderLeft: `5px solid ${COLOR_HEX[col as CardColor]}`,
                       }}
                     >
-                      {col}
+                      <span>{col}</span>
+                      <span className="text-[8px] font-mono text-casino-gold">
+                        Assign
+                      </span>
                     </button>
                   ))
                 : activeWildcard.colors.map((col) => (
                     <button
                       key={col}
                       onClick={(e) => handleWildcardColorSelect(col, e)}
-                      className="py-2.5 rounded-xl border border-white/10 font-bold text-[10px] text-white hover:bg-white/5 text-left pl-3"
-                      style={{ borderLeft: `4px solid ${COLOR_HEX[col]}` }}
+                      className="py-2.5 px-3 rounded-xl border border-white/10 font-bold text-[10px] text-white hover:bg-white/10 transition-all flex items-center justify-between"
+                      style={{ borderLeft: `5px solid ${COLOR_HEX[col]}` }}
                     >
-                      {col}
+                      <span>{col}</span>
+                      <span className="text-[8px] font-mono text-casino-gold">
+                        Assign
+                      </span>
                     </button>
                   ))}
             </div>
@@ -905,7 +1109,7 @@ export const Board: React.FC<BoardProps> = ({
                 setActiveWildcard(null);
                 setWildcardSelectorOpen(false);
               }}
-              className="w-full py-2 border border-white/10 text-gray-400 font-bold text-[10px] rounded-xl"
+              className="w-full py-2 border border-white/10 text-gray-400 font-bold text-[10px] rounded-xl hover:bg-white/5"
             >
               Cancel
             </button>

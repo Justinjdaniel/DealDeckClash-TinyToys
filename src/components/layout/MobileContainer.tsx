@@ -11,17 +11,14 @@ export const MobileContainer: React.FC<MobileContainerProps> = ({
 }) => {
   return (
     <div
-      className={`w-full h-full max-w-md mx-auto bg-radial-gradient-felt shadow-2xl flex flex-col justify-between overflow-hidden relative border-x border-casino-gold/15 transition-transform duration-100 ${
+      className={`w-full h-full flex-1 min-h-0 bg-radial-gradient-felt shadow-2xl flex flex-col justify-between overflow-hidden relative border border-casino-gold/15 rounded-xl sm:rounded-2xl transition-transform duration-100 ${
         screenShake ? "animate-shake" : ""
       }`}
-      style={{
-        minHeight: "-webkit-fill-available",
-      }}
     >
       {/* Safe-area-inset top & bottom indicators */}
       <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-casino-goldDark to-casino-gold z-50 pointer-events-none" />
 
-      <div className="flex-1 flex flex-col justify-between overflow-y-auto pb-safe pt-safe">
+      <div className="flex-1 min-h-0 flex flex-col justify-between overflow-hidden">
         {children}
       </div>
 
