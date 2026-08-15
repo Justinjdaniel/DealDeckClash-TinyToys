@@ -524,62 +524,118 @@ export const CardShell: React.FC<CardShellProps> = ({
         className="w-full h-full select-none pointer-events-none"
       >
         <title>{accessibleTitle}</title>
+        {/* Card Background */}
         <rect
           x="5"
           y="5"
           width="290"
           height="410"
           rx="20"
-          fill="#ffffff"
+          fill="#fafafa"
           stroke="#1e293b"
           strokeWidth="3"
         />
 
+        {/* 50/50 Vertical Split Header Band matching reference sheet */}
+        <path
+          d="M 5,23 A 18,18 0 0,1 23,5 L 150,5 L 150,115 L 5,115 Z"
+          fill={col1}
+        />
+        <path
+          d="M 150,5 L 277,5 A 18,18 0 0,1 295,23 L 295,115 L 150,115 Z"
+          fill={col2}
+        />
+        <line
+          x1="150"
+          y1="5"
+          x2="150"
+          y2="115"
+          stroke="#ffffff"
+          strokeWidth="3"
+        />
+
+        {/* "$" Dollar symbols on both split halves as depicted in reference */}
         <text
-          x="150"
-          y="42"
-          fontFamily="sans-serif"
-          fontSize="16"
+          x="80"
+          y="75"
+          fontFamily="Impact, Arial Black, sans-serif"
+          fontSize="42"
           fontWeight="900"
-          fill="#0f172a"
+          fill="#ffffff"
           textAnchor="middle"
         >
-          Dual-Color Wild
+          $
+        </text>
+        <text
+          x="220"
+          y="75"
+          fontFamily="Impact, Arial Black, sans-serif"
+          fontSize="42"
+          fontWeight="900"
+          fill="#ffffff"
+          textAnchor="middle"
+        >
+          $
         </text>
 
         <ValueBadge
           x={38}
           y={38}
           value={card.value}
-          fill="#1e293b"
-          stroke="#ffffff"
+          fill="#ffffff"
+          stroke="#1e293b"
+          textFill="#1e293b"
         />
         <ValueBadge
           x={262}
           y={382}
           value={card.value}
-          fill="#1e293b"
-          stroke="#ffffff"
+          fill="#ffffff"
+          stroke="#1e293b"
+          textFill="#1e293b"
         />
 
-        <g transform="translate(150, 185)">
+        {/* Center Property Wildcard Label Box */}
+        <rect
+          x="25"
+          y="135"
+          width="250"
+          height="180"
+          rx="12"
+          fill="#ffffff"
+          stroke="#cbd5e1"
+          strokeWidth="2"
+        />
+
+        <text
+          x="150"
+          y="165"
+          fontFamily="Impact, Arial Black, sans-serif"
+          fontSize="22"
+          fontWeight="900"
+          fill="#1e293b"
+          textAnchor="middle"
+          letterSpacing="1"
+        >
+          PROPERTY WILDCARD
+        </text>
+
+        <g transform="translate(150, 205)">
           <rect
             x="-105"
-            y="-80"
-            width="210"
-            height="160"
-            rx="16"
-            fill="#f8fafc"
-            stroke="#cbd5e1"
-            strokeWidth="2"
+            y="-22"
+            width="100"
+            height="44"
+            rx="8"
+            fill={col1}
+            stroke="#ffffff"
+            strokeWidth="1.5"
           />
-
-          <path d="M -103,-78 L 103,-78 L 103,-2 L -103,-2 Z" fill={col1} />
           <text
-            x="0"
-            y="-32"
+            x="-55"
+            y="5"
             fontFamily="sans-serif"
-            fontSize="14"
+            fontSize="11"
             fontWeight="900"
             fill="#ffffff"
             textAnchor="middle"
@@ -587,82 +643,50 @@ export const CardShell: React.FC<CardShellProps> = ({
             {wild.colors[0].toUpperCase()}
           </text>
 
-          <path d="M -103,2 L 103,2 L 103,78 L -103,78 Z" fill={col2} />
+          <rect
+            x="5"
+            y="-22"
+            width="100"
+            height="44"
+            rx="8"
+            fill={col2}
+            stroke="#ffffff"
+            strokeWidth="1.5"
+          />
           <text
-            x="0"
-            y="48"
+            x="55"
+            y="5"
             fontFamily="sans-serif"
-            fontSize="14"
+            fontSize="11"
             fontWeight="900"
             fill="#ffffff"
             textAnchor="middle"
           >
             {wild.colors[1].toUpperCase()}
           </text>
-
-          <circle
-            cx="0"
-            cy="0"
-            r="22"
-            fill="#ffffff"
-            stroke="#1e293b"
-            strokeWidth="2"
-          />
-          <text
-            x="0"
-            y="5"
-            fontFamily="sans-serif"
-            fontSize="11"
-            fontWeight="900"
-            fill="#0f172a"
-            textAnchor="middle"
-          >
-            50/50
-          </text>
         </g>
 
-        <rect
-          x="25"
-          y="290"
-          width="115"
-          height="32"
-          rx="8"
-          fill={col1}
-          stroke="#ffffff"
-          strokeWidth="1.5"
-        />
         <text
-          x="82.5"
-          y="311"
+          x="150"
+          y="275"
           fontFamily="sans-serif"
           fontSize="10"
-          fontWeight="800"
-          fill="#ffffff"
+          fontWeight="700"
+          fill="#64748b"
           textAnchor="middle"
         >
-          {wild.colors[0].toUpperCase()}
+          Play with either color set
         </text>
-
-        <rect
-          x="160"
-          y="290"
-          width="115"
-          height="32"
-          rx="8"
-          fill={col2}
-          stroke="#ffffff"
-          strokeWidth="1.5"
-        />
         <text
-          x="217.5"
-          y="311"
+          x="150"
+          y="295"
           fontFamily="sans-serif"
-          fontSize="10"
-          fontWeight="800"
-          fill="#ffffff"
+          fontSize="9"
+          fontWeight="600"
+          fill="#94a3b8"
           textAnchor="middle"
         >
-          {wild.colors[1].toUpperCase()}
+          Can be swapped during your turn
         </text>
       </svg>
     );
