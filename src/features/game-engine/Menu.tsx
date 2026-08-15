@@ -8,23 +8,24 @@ import {
   Globe,
   Terminal,
   LucideIcon,
-  Volume2,
-  VolumeX,
+  Settings,
 } from "lucide-react";
 import { useGamifiedAudio } from "../audio/AudioContext";
+import { SettingsDialog } from "../../components/SettingsDialog";
 
 interface MenuProps {
   onStartGame: (botStyle: BotStyle, roomCode?: string) => void;
 }
 
 export const Menu: React.FC<MenuProps> = ({ onStartGame }) => {
-  const { playSound, muted, setMuted } = useGamifiedAudio();
+  const { playSound } = useGamifiedAudio();
   const [selectedStyle, setSelectedStyle] = useState<BotStyle>("Aggressive");
   const [roomCode, setRoomCode] = useState("");
   const [isMultiplayer, setIsMultiplayer] = useState(false);
   const [multiplayerMode, setMultiplayerMode] = useState<"lobby" | "room">(
     "lobby",
   );
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const botStyles: { name: BotStyle; desc: string; icon: LucideIcon }[] = [
     {
@@ -69,19 +70,17 @@ export const Menu: React.FC<MenuProps> = ({ onStartGame }) => {
           </p>
         </div>
 
-        {/* Small mobile audio toggler */}
+        {/* Settings dialogue button */}
         <button
           onClick={() => {
             playSound("click");
-            setMuted(!muted);
+            setIsSettingsOpen(true);
           }}
-          className="p-2 bg-black/40 border border-casino-gold/20 rounded-xl text-casino-gold flex items-center justify-center hover:scale-105 animate-[scaleIn_0.1s_ease-out]"
+          className="p-2 bg-black/40 border border-casino-gold/20 rounded-xl text-casino-gold flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
+          aria-label="Settings"
+          title="Settings"
         >
-          {muted ? (
-            <VolumeX className="w-4 h-4 text-red-400" />
-          ) : (
-            <Volume2 className="w-4 h-4" />
-          )}
+          <Settings className="w-4 h-4" />
         </button>
       </div>
 
@@ -307,6 +306,12 @@ export const Menu: React.FC<MenuProps> = ({ onStartGame }) => {
           </div>
         )}
       </div>
+
+      {/* Settings Dialog Modal */}
+      <SettingsDialog
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+      />
 
       {/* Lobby Footer info */}
       <div className="border-t border-white/5 pt-3.5 text-center text-[10px] text-gray-500 font-semibold leading-relaxed">
