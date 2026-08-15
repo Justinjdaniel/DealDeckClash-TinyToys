@@ -130,9 +130,15 @@ export const Board: React.FC<BoardProps> = ({
 
   // Dialog focus refs
   const logsDialogRef = useDialogFocus(logsOpen);
-  const actionMenuDialogRef = useDialogFocus(actionMenuOpen);
-  const targetSelectDialogRef = useDialogFocus(targetSelectOpen);
-  const wildcardSelectorDialogRef = useDialogFocus(wildcardSelectorOpen);
+  const actionMenuDialogRef = useDialogFocus(
+    actionMenuOpen && Boolean(selectedHandCard),
+  );
+  const targetSelectDialogRef = useDialogFocus(
+    targetSelectOpen && Boolean(targetOptions),
+  );
+  const wildcardSelectorDialogRef = useDialogFocus(
+    wildcardSelectorOpen && Boolean(activeWildcard),
+  );
   const discardDialogRef = useDialogFocus(isDiscarding);
 
   // AI bot controller handles bot decision timing, weights, and action dispatch
@@ -689,7 +695,7 @@ export const Board: React.FC<BoardProps> = ({
                         </span>
                       )}
                     </div>
-                    <div className="flex flex-col -space-y-10 mt-1 pb-2">
+                    <div className="flex flex-col -space-y-6 sm:-space-y-7 mt-1 pb-2">
                       {set.cards.map((card, idx) => (
                         <div
                           key={card.id}
@@ -805,7 +811,7 @@ export const Board: React.FC<BoardProps> = ({
                       )}
                     </div>
 
-                    <div className="flex flex-col -space-y-12 mt-1 pb-2">
+                    <div className="flex flex-col -space-y-7 sm:-space-y-8 mt-1 pb-2">
                       {set.cards.map((card, idx) => (
                         <div
                           key={card.id}
@@ -926,24 +932,36 @@ export const Board: React.FC<BoardProps> = ({
         </div>
 
         {/* Curved Card Fan Layout */}
-        <div className="w-full flex items-center justify-center pt-6 pb-2 overflow-x-auto overflow-y-visible scrollbar-none relative min-h-[140px] sm:min-h-[160px]">
-          <div className="flex items-center justify-center -space-x-8 sm:-space-x-10 px-6 py-4 overflow-visible">
+        <div className="w-full flex items-center justify-center pt-4 pb-2 overflow-x-auto overflow-y-visible scrollbar-none relative min-h-[140px] sm:min-h-[160px] px-2 sm:px-4">
+          <div className="flex items-center justify-center px-4 py-4 overflow-visible max-w-full">
             {human.hand.map((card, idx) => {
               const isSelected = selectedHandCard?.id === card.id;
               const total = human.hand.length;
               const mid = (total - 1) / 2;
               const offset = idx - mid;
-              const rotateDeg = total > 1 ? offset * 4 : 0;
-              const translateY = total > 1 ? Math.abs(offset) * 3 : 0;
+              const rotateDeg = total > 1 ? offset * (total > 5 ? 3 : 4) : 0;
+              const translateY =
+                total > 1 ? Math.abs(offset) * (total > 5 ? 2 : 3) : 0;
+
+              // Dynamic stagger overlap taking advantage of available container space
+              let marginLeft = "0px";
+              if (idx > 0) {
+                if (total <= 3) marginLeft = "0.5rem";
+                else if (total === 4) marginLeft = "-0.5rem";
+                else if (total === 5) marginLeft = "-1rem";
+                else if (total === 6) marginLeft = "-1.5rem";
+                else marginLeft = "-2rem";
+              }
 
               return (
                 <div
                   key={card.id}
                   style={{
+                    marginLeft,
                     transform: `rotate(${rotateDeg}deg) translateY(${translateY}px)`,
                     zIndex: isSelected ? 40 : idx + 1,
                   }}
-                  className="flex-shrink-0 cursor-pointer group relative transition-transform duration-200"
+                  className="flex-shrink-0 cursor-pointer group relative transition-all duration-200"
                 >
                   <div className="transform transition-all duration-200 ease-out group-hover:-translate-y-7 group-hover:scale-110 group-hover:z-50 relative">
                     <button
