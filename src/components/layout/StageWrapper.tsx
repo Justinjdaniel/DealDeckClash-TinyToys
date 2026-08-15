@@ -26,7 +26,7 @@ export const StageWrapper: React.FC<StageWrapperProps> = ({ children }) => {
       <div className="absolute bottom-[-20%] right-[-20%] w-[60%] h-[60%] rounded-full bg-amber-950/20 blur-[120px] pointer-events-none" />
 
       {/* Main Grid Wrapper for Wide Screens */}
-      <div className="w-full h-full flex-1 min-h-0 flex items-center justify-center gap-4 relative z-10">
+      <div className="w-full h-full flex-1 min-h-0 flex flex-col xl:flex-row items-center justify-center gap-2 sm:gap-4 relative z-10">
         {/* Left Informative Panel: Hidden on Mobile / Tablet */}
         <div className="hidden xl:flex flex-col justify-between w-64 h-full glass-panel rounded-2xl p-5 border border-casino-gold/10 text-left flex-shrink-0">
           <div>
@@ -72,6 +72,43 @@ export const StageWrapper: React.FC<StageWrapperProps> = ({ children }) => {
 
         {/* Center Game Stage Container: Fills remaining space dynamically */}
         <div className="w-full h-full flex-1 min-h-0 flex flex-col relative overflow-hidden">
+          {/* Compact Mobile / Tablet Audio Control Floating Bar */}
+          <div className="flex xl:hidden items-center justify-between gap-2 px-3 py-1 bg-black/60 backdrop-blur-md rounded-xl border border-casino-gold/20 mb-1.5 flex-shrink-0 z-30">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleMuteToggle}
+                className="p-1 bg-black/40 text-casino-gold rounded-md border border-casino-gold/20 hover:scale-105 transition-transform"
+                title={muted ? "Unmute Audio" : "Mute Audio"}
+                aria-label={muted ? "Unmute Audio" : "Mute Audio"}
+              >
+                {muted ? (
+                  <VolumeX className="w-3.5 h-3.5 text-red-400" />
+                ) : (
+                  <Volume2 className="w-3.5 h-3.5" />
+                )}
+              </button>
+              <span className="text-[10px] font-mono font-bold text-gray-300 uppercase">
+                Audio
+              </span>
+            </div>
+            <div className="flex items-center gap-2 flex-1 max-w-[160px]">
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={volume}
+                onChange={handleVolumeChange}
+                disabled={muted}
+                aria-label="Boardroom Audio Volume"
+                className="w-full h-1 bg-black/80 rounded-lg appearance-none cursor-pointer accent-casino-gold disabled:opacity-30"
+              />
+              <span className="text-[10px] font-mono font-bold text-casino-gold min-w-[28px] text-right">
+                {muted ? "0%" : `${Math.round(volume * 100)}%`}
+              </span>
+            </div>
+          </div>
+
           {children}
         </div>
 

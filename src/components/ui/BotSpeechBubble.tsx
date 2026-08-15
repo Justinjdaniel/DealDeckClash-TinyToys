@@ -73,7 +73,7 @@ export const BotSpeechBubble: React.FC<BotSpeechBubbleProps> = ({
               )}
 
               {tacticalExplanation && (
-                <p className="text-[10px] text-amber-200/80 font-mono mt-1.5 pt-1 border-t border-white/10 truncate">
+                <p className="text-[10px] text-amber-200/80 font-mono mt-1.5 pt-1 border-t border-white/10 break-words leading-relaxed">
                   💡 {tacticalExplanation}
                 </p>
               )}

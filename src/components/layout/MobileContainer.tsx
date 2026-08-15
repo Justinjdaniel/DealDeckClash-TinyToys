@@ -18,7 +18,13 @@ export const MobileContainer: React.FC<MobileContainerProps> = ({
       {/* Safe-area-inset top & bottom indicators */}
       <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-casino-goldDark to-casino-gold z-50 pointer-events-none" />
 
-      <div className="flex-1 min-h-0 flex flex-col justify-between overflow-hidden">
+      <div
+        className="flex-1 min-h-0 flex flex-col justify-between overflow-hidden"
+        style={{
+          paddingTop: "env(safe-area-inset-top, 0px)",
+          paddingBottom: "env(safe-area-inset-bottom, 0px)",
+        }}
+      >
         {children}
       </div>
 

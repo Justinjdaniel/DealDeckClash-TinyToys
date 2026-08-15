@@ -44,6 +44,54 @@ interface BoardProps {
   triggerScreenShake: (dur?: number) => void;
 }
 
+// Focus management hook for accessible dialogs / modals
+function useDialogFocus(isOpen: boolean) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      previousFocusRef.current = document.activeElement as HTMLElement;
+      if (dialogRef.current) {
+        dialogRef.current.focus();
+      }
+
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === "Tab" && dialogRef.current) {
+          const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
+            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+          );
+          if (focusable.length === 0) return;
+          const first = focusable[0];
+          const last = focusable[focusable.length - 1];
+
+          if (e.shiftKey) {
+            if (document.activeElement === first) {
+              e.preventDefault();
+              last.focus();
+            }
+          } else {
+            if (document.activeElement === last) {
+              e.preventDefault();
+              first.focus();
+            }
+          }
+        }
+      };
+
+      window.addEventListener("keydown", handleKeyDown);
+      return () => {
+        window.removeEventListener("keydown", handleKeyDown);
+        if (previousFocusRef.current) {
+          previousFocusRef.current.focus();
+        }
+      };
+    }
+  }, [isOpen]);
+
+  return dialogRef;
+}
+
 export const Board: React.FC<BoardProps> = ({
   state,
   onDispatch,
@@ -84,6 +132,16 @@ export const Board: React.FC<BoardProps> = ({
   const human = state.players.find((p) => !p.isBot);
   const isHumanTurn = state.players[state.currentPlayerIndex].id === human?.id;
 
+  const isDiscarding =
+    state.status === "DISCARDING" && state.pendingDiscardPlayerId === human?.id;
+
+  // Dialog focus refs
+  const logsDialogRef = useDialogFocus(logsOpen);
+  const actionMenuDialogRef = useDialogFocus(actionMenuOpen);
+  const targetSelectDialogRef = useDialogFocus(targetSelectOpen);
+  const wildcardSelectorDialogRef = useDialogFocus(wildcardSelectorOpen);
+  const discardDialogRef = useDialogFocus(isDiscarding);
+
   // AI bot controller handles bot decision timing, weights, and action dispatch
   const { botCommentary, botWeight, tacticalExplanation } = useBotController({
     state,
@@ -108,6 +166,7 @@ export const Board: React.FC<BoardProps> = ({
     }
 
     const timer = setTimeout(() => {
+      resetStreak();
       onDispatch({
         type: "END_TURN",
         payload: { playerId: human.id },
@@ -126,6 +185,7 @@ export const Board: React.FC<BoardProps> = ({
     human?.id,
     onDispatch,
     human,
+    resetStreak,
   ]);
 
   // Trigger win or lose celebration once
@@ -508,8 +568,9 @@ export const Board: React.FC<BoardProps> = ({
               playSound("click");
               setLogsOpen(true);
             }}
-            className="px-2.5 py-1 bg-casino-gold/10 hover:bg-casino-gold/20 text-casino-gold border border-casino-gold/30 rounded-lg text-[10px] font-mono font-bold flex items-center gap-1.5 transition-all hover:scale-105"
+            className="px-2.5 py-1 bg-casino-gold/10 hover:bg-casino-gold/20 text-casino-gold border border-casino-gold/30 rounded-lg text-[10px] font-mono font-bold flex items-center gap-1.5 transition-all hover:scale-105 focus:outline-none focus:ring-2 focus:ring-casino-gold"
             title="View Game Console Logs"
+            aria-label="View Game Console Logs"
           >
             <FileText className="w-3 h-3" />
             <span>📜 Logs [{state.logs.length}]</span>
@@ -529,8 +590,9 @@ export const Board: React.FC<BoardProps> = ({
               playSound("click");
               onDispatch({ type: "RESET_GAME" });
             }}
-            className="p-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-lg hover:scale-105 active:scale-95 transition-transform"
+            className="p-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-lg hover:scale-105 active:scale-95 transition-transform focus:outline-none focus:ring-2 focus:ring-red-400"
             title="Surrender Match"
+            aria-label="Surrender Match"
           >
             <LogOut className="w-3.5 h-3.5" />
           </button>
@@ -775,8 +837,9 @@ export const Board: React.FC<BoardProps> = ({
                                   });
                                 }
                               }}
-                              className="absolute -top-1 -right-1 bg-casino-gold text-black text-[7px] font-black px-1 rounded shadow hover:scale-110 transition-transform z-10"
+                              className="absolute -top-1 -right-1 bg-casino-gold text-black text-[7px] font-black px-1 rounded shadow hover:scale-110 transition-transform z-10 focus:outline-none focus:ring-1 focus:ring-black"
                               title="Flip Wildcard Color"
+                              aria-label={`Flip Wildcard ${card.name} color`}
                             >
                               Flip
                             </button>
@@ -793,41 +856,47 @@ export const Board: React.FC<BoardProps> = ({
       </div>
 
       {/* DISCARD OVERFLOW MODAL VIEW */}
-      {state.status === "DISCARDING" &&
-        state.pendingDiscardPlayerId === human.id && (
-          <div className="absolute inset-x-0 bottom-0 top-0 bg-black/85 backdrop-blur-md z-40 p-4 flex flex-col items-center justify-center animate-[scaleIn_0.2s_ease-out]">
-            <div className="max-w-md w-full bg-red-950/90 border border-red-500/40 rounded-2xl p-4 shadow-2xl flex flex-col items-center">
-              <div className="text-center mb-3 flex items-center gap-1.5">
-                <AlertTriangle className="text-red-400 animate-bounce w-5 h-5" />
-                <span className="text-xs sm:text-sm font-black text-red-200">
-                  HAND LIMIT EXCEEDED: Discard down to 7 cards!
-                </span>
-              </div>
-              <p className="text-[10px] text-red-300 text-center mb-3">
-                Tap cards below to discard from hand ({human.hand.length}/7):
-              </p>
-              <div className="flex flex-wrap justify-center gap-2 max-h-[220px] overflow-y-auto p-1">
-                {human.hand.map((card) => (
-                  <div
-                    key={card.id}
-                    className="w-14 h-20 flex-shrink-0 relative"
-                  >
-                    <PlayingCard
-                      card={card}
-                      onClick={() => {
-                        playSound("cardSweep");
-                        onDispatch({
-                          type: "DISCARD_OVERFLOW",
-                          payload: { playerId: human.id, cardIds: [card.id] },
-                        });
-                      }}
-                    />
-                  </div>
-                ))}
-              </div>
+      {isDiscarding && (
+        <div
+          ref={discardDialogRef}
+          tabIndex={-1}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Discard Overflow Modal"
+          className="absolute inset-x-0 bottom-0 top-0 bg-black/85 backdrop-blur-md z-40 p-4 flex flex-col items-center justify-center animate-[scaleIn_0.2s_ease-out] focus:outline-none"
+        >
+          <div className="max-w-md w-full bg-red-950/90 border border-red-500/40 rounded-2xl p-4 shadow-2xl flex flex-col items-center">
+            <div className="text-center mb-3 flex items-center gap-1.5">
+              <AlertTriangle className="text-red-400 animate-bounce w-5 h-5" />
+              <span className="text-xs sm:text-sm font-black text-red-200">
+                HAND LIMIT EXCEEDED: Discard down to 7 cards!
+              </span>
+            </div>
+            <p className="text-[10px] text-red-300 text-center mb-3">
+              Tap cards below to discard from hand ({human.hand.length}/7):
+            </p>
+            <div className="flex flex-wrap justify-center gap-2 max-h-[220px] overflow-y-auto p-1">
+              {human.hand.map((card) => (
+                <button
+                  type="button"
+                  key={card.id}
+                  onClick={() => {
+                    playSound("cardSweep");
+                    onDispatch({
+                      type: "DISCARD_OVERFLOW",
+                      payload: { playerId: human.id, cardIds: [card.id] },
+                    });
+                  }}
+                  aria-label={`Discard ${card.name}`}
+                  className="w-14 h-20 flex-shrink-0 relative text-left focus:outline-none focus:ring-2 focus:ring-red-400 rounded-2xl"
+                >
+                  <PlayingCard card={card} />
+                </button>
+              ))}
             </div>
           </div>
-        )}
+        </div>
+      )}
 
       {/* PLAYER PRIVATE HAND & CONTROLS FOOTER */}
       <div className="px-3 sm:px-4 py-2.5 bg-black/60 border-t border-casino-gold/20 flex flex-col items-center relative z-20 backdrop-blur-md">
@@ -840,7 +909,8 @@ export const Board: React.FC<BoardProps> = ({
           <button
             onClick={handleEndTurn}
             disabled={!isHumanTurn || state.status !== "PLAYING"}
-            className={`py-1.5 px-3 sm:px-4 rounded-xl text-[10px] sm:text-xs font-serif font-black flex items-center gap-1.5 transition-all shadow-lg ${
+            aria-label="End Turn"
+            className={`py-1.5 px-3 sm:px-4 rounded-xl text-[10px] sm:text-xs font-serif font-black flex items-center gap-1.5 transition-all shadow-lg focus:outline-none focus:ring-2 focus:ring-casino-gold ${
               isHumanTurn && state.status === "PLAYING"
                 ? "bg-gradient-to-r from-amber-500 via-casino-gold to-yellow-400 text-black shadow-gold-glow hover:scale-105 active:scale-95 animate-pulse"
                 : "bg-white/10 text-gray-500 cursor-not-allowed border border-white/5"
@@ -856,16 +926,15 @@ export const Board: React.FC<BoardProps> = ({
           {human.hand.map((card) => {
             const isSelected = selectedHandCard?.id === card.id;
             return (
-              <div
+              <button
+                type="button"
                 key={card.id}
-                className="w-16 h-24 sm:w-20 sm:h-28 flex-shrink-0"
+                onClick={() => handleHandCardClick(card)}
+                aria-label={`Select hand card ${card.name}`}
+                className="w-16 h-24 sm:w-20 sm:h-28 flex-shrink-0 text-left focus:outline-none focus:ring-2 focus:ring-casino-gold rounded-2xl"
               >
-                <PlayingCard
-                  card={card}
-                  isSelected={isSelected}
-                  onClick={() => handleHandCardClick(card)}
-                />
-              </div>
+                <PlayingCard card={card} isSelected={isSelected} />
+              </button>
             );
           })}
         </div>
@@ -873,7 +942,14 @@ export const Board: React.FC<BoardProps> = ({
 
       {/* CONSOLE LOGS DRAWER POPUP */}
       {logsOpen && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div
+          ref={logsDialogRef}
+          tabIndex={-1}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Board Console Logs Dialog"
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 focus:outline-none"
+        >
           <div className="max-w-md w-full glass-panel rounded-2xl p-4 border border-casino-gold/40 shadow-2xl flex flex-col h-[350px] animate-[scaleIn_0.15s_ease-out]">
             <div className="flex items-center justify-between border-b border-casino-gold/20 pb-2 mb-2">
               <div className="flex items-center gap-2">
@@ -884,7 +960,8 @@ export const Board: React.FC<BoardProps> = ({
               </div>
               <button
                 onClick={() => setLogsOpen(false)}
-                className="p-1 text-gray-400 hover:text-white rounded-lg"
+                className="p-1 text-gray-400 hover:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-casino-gold"
+                aria-label="Close Logs Dialog"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -905,7 +982,14 @@ export const Board: React.FC<BoardProps> = ({
 
       {/* ACTION DEPLOYMENT SELECTION MENU */}
       {actionMenuOpen && selectedHandCard && (
-        <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div
+          ref={actionMenuDialogRef}
+          tabIndex={-1}
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Deploy ${selectedHandCard.name}`}
+          className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 focus:outline-none"
+        >
           <div className="max-w-sm w-full glass-panel rounded-2xl p-5 border border-casino-gold/40 shadow-gold-glow animate-[scaleIn_0.15s_ease-out] flex flex-col items-center">
             {/* Visual Preview of selected card */}
             <div className="w-20 h-28 mb-3">
@@ -923,7 +1007,7 @@ export const Board: React.FC<BoardProps> = ({
               {selectedHandCard.type === "Money" && (
                 <button
                   onClick={(e) => handlePlayToBank(e)}
-                  className="w-full py-2.5 bg-casino-gold text-casino-felt font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 hover:scale-[1.02] active:scale-95 transition-all shadow-md"
+                  className="w-full py-2.5 bg-casino-gold text-casino-felt font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 hover:scale-[1.02] active:scale-95 transition-all shadow-md focus:outline-none focus:ring-2 focus:ring-casino-gold"
                 >
                   <Coins className="w-4 h-4" />
                   Deposit Cash into Bank
@@ -934,7 +1018,7 @@ export const Board: React.FC<BoardProps> = ({
                 selectedHandCard.type === "Wildcard") && (
                 <button
                   onClick={(e) => handlePlayToProperties(e)}
-                  className="w-full py-2.5 bg-casino-gold text-casino-felt font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 hover:scale-[1.02] active:scale-95 transition-all shadow-md"
+                  className="w-full py-2.5 bg-casino-gold text-casino-felt font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 hover:scale-[1.02] active:scale-95 transition-all shadow-md focus:outline-none focus:ring-2 focus:ring-casino-gold"
                 >
                   <ArrowUp className="w-4 h-4" />
                   Build Property Zone
@@ -945,14 +1029,14 @@ export const Board: React.FC<BoardProps> = ({
                 <>
                   <button
                     onClick={handlePlayAction}
-                    className="w-full py-2.5 bg-casino-gold text-casino-felt font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 hover:scale-[1.02] active:scale-95 transition-all shadow-md"
+                    className="w-full py-2.5 bg-casino-gold text-casino-felt font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 hover:scale-[1.02] active:scale-95 transition-all shadow-md focus:outline-none focus:ring-2 focus:ring-casino-gold"
                   >
                     <Play className="w-4 h-4 fill-current" />
                     Play Action Card Effect
                   </button>
                   <button
                     onClick={(e) => handlePlayToBank(e)}
-                    className="w-full py-2.5 border border-casino-gold/40 hover:border-casino-gold text-casino-gold font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 hover:bg-casino-gold/10 transition-all"
+                    className="w-full py-2.5 border border-casino-gold/40 hover:border-casino-gold text-casino-gold font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 hover:bg-casino-gold/10 transition-all focus:outline-none focus:ring-2 focus:ring-casino-gold"
                   >
                     <Coins className="w-4 h-4" />
                     Deposit Cash face value ({selectedHandCard.value}M)
@@ -965,7 +1049,7 @@ export const Board: React.FC<BoardProps> = ({
                   setSelectedHandCard(null);
                   setActionMenuOpen(false);
                 }}
-                className="w-full py-2 border border-white/10 text-gray-400 font-bold text-[10px] rounded-xl hover:bg-white/5 transition-colors"
+                className="w-full py-2 border border-white/10 text-gray-400 font-bold text-[10px] rounded-xl hover:bg-white/5 transition-colors focus:outline-none focus:ring-2 focus:ring-casino-gold"
               >
                 Cancel Selection
               </button>
@@ -976,7 +1060,14 @@ export const Board: React.FC<BoardProps> = ({
 
       {/* TARGET SELECTION MODAL WITH FULL VISUAL CARDS */}
       {targetSelectOpen && targetOptions && (
-        <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div
+          ref={targetSelectDialogRef}
+          tabIndex={-1}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Specify Target Card Dialog"
+          className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 focus:outline-none"
+        >
           <div className="max-w-md w-full glass-panel rounded-2xl p-5 border border-casino-gold/40 shadow-gold-glow animate-[scaleIn_0.15s_ease-out]">
             <h3 className="text-sm font-serif font-black text-white text-center mb-1">
               SPECIFY TARGET CARD
@@ -987,13 +1078,15 @@ export const Board: React.FC<BoardProps> = ({
 
             <div className="flex flex-wrap justify-center gap-3 mb-4 max-h-[220px] overflow-y-auto p-1">
               {targetOptions.options.map((opt) => (
-                <div
+                <button
+                  type="button"
                   key={opt.value}
                   onClick={() => {
                     playSound("click");
                     setSelectedTargetOption(opt.value);
                   }}
-                  className={`w-16 h-24 flex-shrink-0 cursor-pointer rounded-xl transition-all transform hover:scale-105 relative ${
+                  aria-label={opt.label}
+                  className={`w-16 h-24 flex-shrink-0 cursor-pointer rounded-2xl transition-all transform hover:scale-105 relative text-left focus:outline-none focus:ring-2 focus:ring-casino-gold ${
                     selectedTargetOption === opt.value
                       ? "ring-4 ring-casino-gold shadow-gold-glow scale-105"
                       : "opacity-80 hover:opacity-100"
@@ -1020,7 +1113,7 @@ export const Board: React.FC<BoardProps> = ({
                       ✓
                     </div>
                   )}
-                </div>
+                </button>
               ))}
             </div>
 
@@ -1032,14 +1125,14 @@ export const Board: React.FC<BoardProps> = ({
                   setTargetOptions(null);
                   setTargetSelectOpen(false);
                 }}
-                className="py-2.5 border border-white/10 text-gray-400 font-bold text-[10px] rounded-xl hover:bg-white/5"
+                className="py-2.5 border border-white/10 text-gray-400 font-bold text-[10px] rounded-xl hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-casino-gold"
               >
                 Cancel
               </button>
               <button
                 onClick={(e) => handleTargetConfirm(e)}
                 disabled={!selectedTargetOption}
-                className="py-2.5 bg-casino-gold text-casino-felt font-bold text-[10px] rounded-xl disabled:opacity-40 hover:scale-[1.02] active:scale-95 transition-all"
+                className="py-2.5 bg-casino-gold text-casino-felt font-bold text-[10px] rounded-xl disabled:opacity-40 hover:scale-[1.02] active:scale-95 transition-all focus:outline-none focus:ring-2 focus:ring-casino-gold"
               >
                 Confirm Target
               </button>
@@ -1050,7 +1143,14 @@ export const Board: React.FC<BoardProps> = ({
 
       {/* WILDCARD COLOR SELECTION MODAL */}
       {wildcardSelectorOpen && activeWildcard && (
-        <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div
+          ref={wildcardSelectorDialogRef}
+          tabIndex={-1}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Wildcard Color Tuning Dialog"
+          className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 focus:outline-none"
+        >
           <div className="max-w-sm w-full glass-panel rounded-2xl p-5 border border-casino-gold/40 shadow-gold-glow animate-[scaleIn_0.15s_ease-out]">
             <h3 className="text-sm font-serif font-black text-white text-center mb-1">
               WILDCARD COLOR TUNING
@@ -1078,7 +1178,7 @@ export const Board: React.FC<BoardProps> = ({
                       onClick={(e) =>
                         handleWildcardColorSelect(col as CardColor, e)
                       }
-                      className="py-2.5 px-3 rounded-xl border border-white/10 font-bold text-[10px] text-white hover:bg-white/10 transition-all flex items-center justify-between"
+                      className="py-2.5 px-3 rounded-xl border border-white/10 font-bold text-[10px] text-white hover:bg-white/10 transition-all flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-casino-gold"
                       style={{
                         borderLeft: `5px solid ${COLOR_HEX[col as CardColor]}`,
                       }}
@@ -1093,7 +1193,7 @@ export const Board: React.FC<BoardProps> = ({
                     <button
                       key={col}
                       onClick={(e) => handleWildcardColorSelect(col, e)}
-                      className="py-2.5 px-3 rounded-xl border border-white/10 font-bold text-[10px] text-white hover:bg-white/10 transition-all flex items-center justify-between"
+                      className="py-2.5 px-3 rounded-xl border border-white/10 font-bold text-[10px] text-white hover:bg-white/10 transition-all flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-casino-gold"
                       style={{ borderLeft: `5px solid ${COLOR_HEX[col]}` }}
                     >
                       <span>{col}</span>
@@ -1109,7 +1209,7 @@ export const Board: React.FC<BoardProps> = ({
                 setActiveWildcard(null);
                 setWildcardSelectorOpen(false);
               }}
-              className="w-full py-2 border border-white/10 text-gray-400 font-bold text-[10px] rounded-xl hover:bg-white/5"
+              className="w-full py-2 border border-white/10 text-gray-400 font-bold text-[10px] rounded-xl hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-casino-gold"
             >
               Cancel
             </button>
