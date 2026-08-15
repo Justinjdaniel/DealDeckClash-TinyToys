@@ -100,6 +100,17 @@ export const ReactionModal: React.FC<ReactionModalProps> = ({
     }
   };
 
+  useEffect(() => {
+    if (!showPaymentModal) return;
+
+    // Bounded fallback timer for payment selection modal
+    const fallbackTimer = setTimeout(() => {
+      onTimeoutRef.current();
+    }, 30000);
+
+    return () => clearTimeout(fallbackTimer);
+  }, [showPaymentModal]);
+
   if (showPaymentModal && humanPlayer) {
     const bankCards = humanPlayer.bank;
     const propertyCards = humanPlayer.properties.flatMap((s) => s.cards);

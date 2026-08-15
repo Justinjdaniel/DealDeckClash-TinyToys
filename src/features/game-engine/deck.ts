@@ -82,7 +82,7 @@ export const createDeck = (): Card[] => {
       value: 2,
       description: "2M Face Value Bankable Cash",
     });
-  // 6x 1M
+  // 4x 1M
   for (let i = 0; i < 4; i++)
     cards.push({
       id: nextId("m1"),
@@ -397,7 +397,7 @@ export const createDeck = (): Card[] => {
     });
 
   // 4. Action Cards
-  // 10x Pass Go (Draw 2 extra cards)
+  // 7x Pass Go (Draw 2 extra cards)
   for (let i = 0; i < 7; i++)
     cards.push({
       id: nextId("a-pg"),

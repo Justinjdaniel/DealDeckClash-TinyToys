@@ -51,9 +51,6 @@ function GameOrchestrator() {
   const { playSound } = useGamifiedAudio();
 
   const {
-    xp,
-    level,
-    streak,
     screenShake,
     floatingPoints,
     recentAchievement,
@@ -123,9 +120,6 @@ function GameOrchestrator() {
             state={gameState}
             onDispatch={handleActionDispatch}
             botStyle={botStyle}
-            xp={xp}
-            level={level}
-            streak={streak}
             gainXP={gainXP}
             unlockAchievement={unlockAchievement}
             incrementStreak={incrementStreak}

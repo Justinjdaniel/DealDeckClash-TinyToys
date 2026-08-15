@@ -578,7 +578,7 @@ export const dispatchAction = (
         }
       } else {
         logMsg(`${responder.name} accepted the action effects / charges.`);
-        resolveReaction(nextState, rx);
+        resolveReaction(nextState, rx, selectedCardIds);
         nextState.reactionQueue = null;
         accepted = true;
       }
@@ -665,6 +665,40 @@ export const dispatchAction = (
 
 // Internal solver to resolve effects when reaction is declined or timers run out
 
+// Helper to validate payment selection against payer assets and required debt amount
+const validatePaymentSelection = (
+  from: PlayerState,
+  cardIds: string[],
+  amount: number,
+): boolean => {
+  if (!cardIds || cardIds.length === 0) return false;
+
+  const allOnTableAssets = [
+    ...from.bank,
+    ...from.properties.flatMap((s) => s.cards),
+  ];
+  const allOnTableIds = new Set(allOnTableAssets.map((c) => c.id));
+
+  // Verify all card IDs belong to payer
+  const allBelong = cardIds.every((id) => allOnTableIds.has(id));
+  if (!allBelong) return false;
+
+  const selectedAssets = allOnTableAssets.filter((c) => cardIds.includes(c.id));
+  const selectedTotalValue = selectedAssets.reduce(
+    (sum, c) => sum + c.value,
+    0,
+  );
+  const totalAvailableValue = allOnTableAssets.reduce(
+    (sum, c) => sum + c.value,
+    0,
+  );
+
+  return (
+    selectedTotalValue >= amount ||
+    (totalAvailableValue < amount && cardIds.length === allOnTableAssets.length)
+  );
+};
+
 // Handle explicit card transfer when player manually selects payment cards
 const transferSpecificCards = (
   from: PlayerState,
@@ -718,6 +752,12 @@ const transferSpecificCards = (
       to.properties = restructureProperties([...toProps, ...forfeitedProps]);
     }
   }
+
+  if (remainingCardIds.size > 0) {
+    logMsg(
+      `⚠️ Unmatched card IDs in payment transfer: ${Array.from(remainingCardIds).join(", ")}`,
+    );
+  }
 };
 
 const resolveReaction = (
@@ -751,7 +791,11 @@ const resolveReaction = (
 
   if (type === "Debt Collector" || type === "Its My Birthday") {
     const amount = rx.actionDetails.amount || 0;
-    if (selectedCardIds && selectedCardIds.length >= 0) {
+    if (
+      selectedCardIds &&
+      selectedCardIds.length > 0 &&
+      validatePaymentSelection(target, selectedCardIds, amount)
+    ) {
       transferSpecificCards(target, attacker, selectedCardIds, state);
     } else {
       transferCash(target, attacker, amount, state);
@@ -761,7 +805,11 @@ const resolveReaction = (
     logMsg(
       `Collecting ${amount}M rent from ${target.name} to ${attacker.name}.`,
     );
-    if (selectedCardIds && selectedCardIds.length >= 0) {
+    if (
+      selectedCardIds &&
+      selectedCardIds.length > 0 &&
+      validatePaymentSelection(target, selectedCardIds, amount)
+    ) {
       transferSpecificCards(target, attacker, selectedCardIds, state);
     } else {
       transferCash(target, attacker, amount, state);

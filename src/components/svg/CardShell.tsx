@@ -39,20 +39,62 @@ const COLOR_MAP: Record<CardColor, string> = {
   Any: "#dfb76c",
 };
 
+interface ValueBadgeProps {
+  x: number;
+  y: number;
+  value: number;
+  fill?: string;
+  stroke?: string;
+  textFill?: string;
+}
+
+const ValueBadge: React.FC<ValueBadgeProps> = ({
+  x,
+  y,
+  value,
+  fill = "#0f0f17",
+  stroke = "#dfb76c",
+  textFill = "#dfb76c",
+}) => (
+  <g transform={`translate(${x}, ${y})`}>
+    <circle
+      cx="0"
+      cy="0"
+      r="18"
+      fill={fill}
+      stroke={stroke}
+      strokeWidth="2.5"
+    />
+    <text
+      x="0"
+      y="5"
+      fontFamily="sans-serif"
+      fontSize="15"
+      fontWeight="900"
+      fill={textFill}
+      textAnchor="middle"
+    >
+      {value}M
+    </text>
+  </g>
+);
+
 export const CardShell: React.FC<CardShellProps> = ({
   card,
   isFlipped = false,
 }) => {
   const cardIdSafe = card.id.replace(/[^a-zA-Z0-9]/g, "");
+  const accessibleTitle = `${card.name} (${card.value}M)`;
 
   if (isFlipped) {
-    // Card Back Design
     return (
       <svg
         viewBox="0 0 300 420"
         xmlns="http://www.w3.org/2000/svg"
+        role="img"
         className="w-full h-full select-none pointer-events-none"
       >
+        <title>Card Back</title>
         <defs>
           <linearGradient
             id={`cardBackBg-${cardIdSafe}`}
@@ -176,9 +218,10 @@ export const CardShell: React.FC<CardShellProps> = ({
       <svg
         viewBox="0 0 300 420"
         xmlns="http://www.w3.org/2000/svg"
+        role="img"
         className="w-full h-full select-none pointer-events-none"
       >
-        {/* Solid Deep Black Background */}
+        <title>{accessibleTitle}</title>
         <rect
           x="5"
           y="5"
@@ -190,7 +233,6 @@ export const CardShell: React.FC<CardShellProps> = ({
           strokeWidth="3"
         />
 
-        {/* Crisp White Inner Border */}
         <rect
           x="12"
           y="12"
@@ -202,53 +244,23 @@ export const CardShell: React.FC<CardShellProps> = ({
           strokeWidth="1.5"
         />
 
-        {/* Enhanced Top-Left Value Badge (Requirement 6) */}
-        <g transform="translate(38, 38)">
-          <circle
-            cx="0"
-            cy="0"
-            r="18"
-            fill="#000000"
-            stroke="#ffffff"
-            strokeWidth="2.5"
-          />
-          <text
-            x="0"
-            y="5"
-            fontFamily="sans-serif"
-            fontSize="15"
-            fontWeight="900"
-            fill="#ffffff"
-            textAnchor="middle"
-          >
-            {card.value}M
-          </text>
-        </g>
+        <ValueBadge
+          x={38}
+          y={38}
+          value={card.value}
+          fill="#000000"
+          stroke="#ffffff"
+          textFill="#ffffff"
+        />
+        <ValueBadge
+          x={262}
+          y={382}
+          value={card.value}
+          fill="#000000"
+          stroke="#ffffff"
+          textFill="#ffffff"
+        />
 
-        {/* Bottom-Right Value Badge */}
-        <g transform="translate(262, 382)">
-          <circle
-            cx="0"
-            cy="0"
-            r="18"
-            fill="#000000"
-            stroke="#ffffff"
-            strokeWidth="2.5"
-          />
-          <text
-            x="0"
-            y="5"
-            fontFamily="sans-serif"
-            fontSize="15"
-            fontWeight="900"
-            fill="#ffffff"
-            textAnchor="middle"
-          >
-            {card.value}M
-          </text>
-        </g>
-
-        {/* Header Title */}
         <text
           x="150"
           y="70"
@@ -262,7 +274,6 @@ export const CardShell: React.FC<CardShellProps> = ({
           {rentCard.actionType === "Multi-Rent" ? "MULTI-RENT" : "RENT"}
         </text>
 
-        {/* Central Shape & Rent Color Indicators */}
         <rect
           x="30"
           y="100"
@@ -274,7 +285,6 @@ export const CardShell: React.FC<CardShellProps> = ({
           strokeWidth="2"
         />
 
-        {/* Color Indicators inside Rent card */}
         <g transform="translate(150, 210)">
           {rentCols.length === 2 ? (
             <g>
@@ -370,7 +380,6 @@ export const CardShell: React.FC<CardShellProps> = ({
           )}
         </g>
 
-        {/* Rent Card Footer description */}
         <text
           x="150"
           y="350"
@@ -392,9 +401,16 @@ export const CardShell: React.FC<CardShellProps> = ({
       <svg
         viewBox="0 0 300 420"
         xmlns="http://www.w3.org/2000/svg"
+        role="img"
         className="w-full h-full select-none pointer-events-none"
       >
-        {/* Solid White Background */}
+        <title>{accessibleTitle}</title>
+        <defs>
+          <clipPath id={`clipJokerBar-${cardIdSafe}`}>
+            <rect x="5" y="5" width="290" height="410" rx="20" />
+          </clipPath>
+        </defs>
+
         <rect
           x="5"
           y="5"
@@ -417,53 +433,23 @@ export const CardShell: React.FC<CardShellProps> = ({
           strokeWidth="1.5"
         />
 
-        {/* Enhanced Top-Left Value Badge (Requirement 6) */}
-        <g transform="translate(38, 38)">
-          <circle
-            cx="0"
-            cy="0"
-            r="18"
-            fill="#ffffff"
-            stroke="#000000"
-            strokeWidth="2.5"
-          />
-          <text
-            x="0"
-            y="5"
-            fontFamily="sans-serif"
-            fontSize="15"
-            fontWeight="900"
-            fill="#000000"
-            textAnchor="middle"
-          >
-            {card.value}M
-          </text>
-        </g>
+        <ValueBadge
+          x={38}
+          y={38}
+          value={card.value}
+          fill="#ffffff"
+          stroke="#000000"
+          textFill="#000000"
+        />
+        <ValueBadge
+          x={262}
+          y={382}
+          value={card.value}
+          fill="#ffffff"
+          stroke="#000000"
+          textFill="#000000"
+        />
 
-        {/* Bottom-Right Value Badge */}
-        <g transform="translate(262, 382)">
-          <circle
-            cx="0"
-            cy="0"
-            r="18"
-            fill="#ffffff"
-            stroke="#000000"
-            strokeWidth="2.5"
-          />
-          <text
-            x="0"
-            y="5"
-            fontFamily="sans-serif"
-            fontSize="15"
-            fontWeight="900"
-            fill="#000000"
-            textAnchor="middle"
-          >
-            {card.value}M
-          </text>
-        </g>
-
-        {/* Center: Bold Black Text "JOKER" in Uppercase Prominent Font */}
         <g transform="translate(150, 200)">
           <rect
             x="-100"
@@ -501,18 +487,20 @@ export const CardShell: React.FC<CardShellProps> = ({
           </text>
         </g>
 
-        {/* Bottom Accent: Horizontal multi-color striped bar running across bottom edge */}
-        <g transform="translate(10, 392)">
-          {ALL_10_COLORS.map((col, idx) => (
-            <rect
-              key={col}
-              x={idx * 28}
-              y="0"
-              width="28"
-              height="18"
-              fill={COLOR_MAP[col]}
-            />
-          ))}
+        {/* Clipped Bottom Accent Bar */}
+        <g clipPath={`url(#clipJokerBar-${cardIdSafe})`}>
+          <g transform="translate(5, 392)">
+            {ALL_10_COLORS.map((col, idx) => (
+              <rect
+                key={col}
+                x={idx * 29}
+                y="0"
+                width="29"
+                height="23"
+                fill={COLOR_MAP[col]}
+              />
+            ))}
+          </g>
         </g>
       </svg>
     );
@@ -528,23 +516,21 @@ export const CardShell: React.FC<CardShellProps> = ({
       <svg
         viewBox="0 0 300 420"
         xmlns="http://www.w3.org/2000/svg"
+        role="img"
         className="w-full h-full select-none pointer-events-none"
       >
+        <title>{accessibleTitle}</title>
         <defs>
           <clipPath id={`clipCard-${cardIdSafe}`}>
             <rect x="5" y="5" width="290" height="410" rx="20" />
           </clipPath>
         </defs>
 
-        {/* 50/50 Split Background */}
         <g clipPath={`url(#clipCard-${cardIdSafe})`}>
-          {/* Left / Top-Left Half */}
           <rect x="5" y="5" width="145" height="410" fill={col1} />
-          {/* Right / Bottom-Right Half */}
           <rect x="150" y="5" width="145" height="410" fill={col2} />
         </g>
 
-        {/* Outer Frame */}
         <rect
           x="5"
           y="5"
@@ -556,53 +542,9 @@ export const CardShell: React.FC<CardShellProps> = ({
           strokeWidth="3"
         />
 
-        {/* Enhanced Top-Left Value Badge (Requirement 6) */}
-        <g transform="translate(38, 38)">
-          <circle
-            cx="0"
-            cy="0"
-            r="18"
-            fill="#0f0f17"
-            stroke="#dfb76c"
-            strokeWidth="2.5"
-          />
-          <text
-            x="0"
-            y="5"
-            fontFamily="sans-serif"
-            fontSize="15"
-            fontWeight="900"
-            fill="#dfb76c"
-            textAnchor="middle"
-          >
-            {card.value}M
-          </text>
-        </g>
+        <ValueBadge x={38} y={38} value={card.value} />
+        <ValueBadge x={262} y={382} value={card.value} />
 
-        {/* Bottom-Right Value Badge */}
-        <g transform="translate(262, 382)">
-          <circle
-            cx="0"
-            cy="0"
-            r="18"
-            fill="#0f0f17"
-            stroke="#dfb76c"
-            strokeWidth="2.5"
-          />
-          <text
-            x="0"
-            y="5"
-            fontFamily="sans-serif"
-            fontSize="15"
-            fontWeight="900"
-            fill="#dfb76c"
-            textAnchor="middle"
-          >
-            {card.value}M
-          </text>
-        </g>
-
-        {/* Central High-Contrast Emblem Badge */}
         <g transform="translate(150, 210)">
           <circle
             cx="0"
@@ -632,7 +574,6 @@ export const CardShell: React.FC<CardShellProps> = ({
           </text>
         </g>
 
-        {/* Color Labels */}
         <rect
           x="20"
           y="310"
@@ -690,9 +631,10 @@ export const CardShell: React.FC<CardShellProps> = ({
       <svg
         viewBox="0 0 300 420"
         xmlns="http://www.w3.org/2000/svg"
+        role="img"
         className="w-full h-full select-none pointer-events-none"
       >
-        {/* Muted Off-White / Light Slate Background */}
+        <title>{accessibleTitle}</title>
         <rect
           x="5"
           y="5"
@@ -715,53 +657,23 @@ export const CardShell: React.FC<CardShellProps> = ({
           strokeWidth="1"
         />
 
-        {/* Enhanced Top-Left Value Badge (Requirement 6) */}
-        <g transform="translate(38, 38)">
-          <circle
-            cx="0"
-            cy="0"
-            r="18"
-            fill="#1e293b"
-            stroke="#ef4444"
-            strokeWidth="2.5"
-          />
-          <text
-            x="0"
-            y="5"
-            fontFamily="sans-serif"
-            fontSize="15"
-            fontWeight="900"
-            fill="#ffffff"
-            textAnchor="middle"
-          >
-            {card.value}M
-          </text>
-        </g>
+        <ValueBadge
+          x={38}
+          y={38}
+          value={card.value}
+          fill="#1e293b"
+          stroke="#ef4444"
+          textFill="#ffffff"
+        />
+        <ValueBadge
+          x={262}
+          y={382}
+          value={card.value}
+          fill="#1e293b"
+          stroke="#ef4444"
+          textFill="#ffffff"
+        />
 
-        {/* Bottom-Right Value Badge */}
-        <g transform="translate(262, 382)">
-          <circle
-            cx="0"
-            cy="0"
-            r="18"
-            fill="#1e293b"
-            stroke="#ef4444"
-            strokeWidth="2.5"
-          />
-          <text
-            x="0"
-            y="5"
-            fontFamily="sans-serif"
-            fontSize="15"
-            fontWeight="900"
-            fill="#ffffff"
-            textAnchor="middle"
-          >
-            {card.value}M
-          </text>
-        </g>
-
-        {/* Action Title Header */}
         <text
           x="150"
           y="45"
@@ -774,9 +686,7 @@ export const CardShell: React.FC<CardShellProps> = ({
           {card.name}
         </text>
 
-        {/* Center Stylized Container Shape (Requirement 7 & Requirement 8) */}
         <g transform="translate(150, 195)">
-          {/* Rounded Geometric Emblem/Diamond Pill Container Shape */}
           <rect
             x="-105"
             y="-90"
@@ -788,7 +698,6 @@ export const CardShell: React.FC<CardShellProps> = ({
             strokeWidth="3"
           />
 
-          {/* HOUSE CARD ICON (Requirement 8) */}
           {isHouse && (
             <g>
               <path
@@ -812,7 +721,6 @@ export const CardShell: React.FC<CardShellProps> = ({
             </g>
           )}
 
-          {/* HOTEL CARD ICON (Requirement 8) */}
           {isHotel && (
             <g>
               <rect
@@ -825,7 +733,6 @@ export const CardShell: React.FC<CardShellProps> = ({
                 stroke="#b91c1c"
                 strokeWidth="3"
               />
-              {/* Hotel Windows */}
               <rect x="-22" y="-35" width="12" height="12" fill="#ffffff" />
               <rect x="10" y="-35" width="12" height="12" fill="#ffffff" />
               <rect x="-22" y="-15" width="12" height="12" fill="#ffffff" />
@@ -845,7 +752,6 @@ export const CardShell: React.FC<CardShellProps> = ({
             </g>
           )}
 
-          {/* Other Standard Action Symbols */}
           {!isHouse && !isHotel && (
             <g>
               <circle
@@ -882,7 +788,6 @@ export const CardShell: React.FC<CardShellProps> = ({
           )}
         </g>
 
-        {/* Action Description */}
         <foreignObject x="30" y="300" width="240" height="50">
           <div
             style={{
@@ -901,7 +806,7 @@ export const CardShell: React.FC<CardShellProps> = ({
     );
   }
 
-  // --- PROPERTY CARDS DESIGN (Requirement 4: Comment out property names, Requirement 6: Top-Left Value Badges) ---
+  // --- PROPERTY CARDS DESIGN (Requirement 4: Color-only) ---
   if (card.type === "Property") {
     const prop = card as PropertyCard;
     const headerCol = COLOR_MAP[prop.color] || "#212121";
@@ -910,9 +815,10 @@ export const CardShell: React.FC<CardShellProps> = ({
       <svg
         viewBox="0 0 300 420"
         xmlns="http://www.w3.org/2000/svg"
+        role="img"
         className="w-full h-full select-none pointer-events-none"
       >
-        {/* Card Shell Base */}
+        <title>{accessibleTitle}</title>
         <rect
           x="5"
           y="5"
@@ -924,73 +830,14 @@ export const CardShell: React.FC<CardShellProps> = ({
           strokeWidth="3.5"
         />
 
-        {/* Top Header Color Banner */}
         <path
           d="M 8,18 A 12,12 0 0,1 18,8 L 282,8 A 12,12 0 0,1 292,18 L 292,75 L 8,75 Z"
           fill={headerCol}
         />
 
-        {/* Requirement 4: Property name text render logic commented out
-        <text
-          x="150"
-          y="48"
-          fontFamily="Georgia, serif"
-          fontSize="15"
-          fontWeight="bold"
-          fill="#ffffff"
-          textAnchor="middle"
-        >
-          {card.name}
-        </text>
-        */}
+        <ValueBadge x={38} y={38} value={card.value} />
+        <ValueBadge x={262} y={382} value={card.value} />
 
-        {/* Enhanced Top-Left Value Badge (Requirement 6) */}
-        <g transform="translate(38, 38)">
-          <circle
-            cx="0"
-            cy="0"
-            r="18"
-            fill="#0f0f17"
-            stroke="#dfb76c"
-            strokeWidth="2.5"
-          />
-          <text
-            x="0"
-            y="5"
-            fontFamily="sans-serif"
-            fontSize="15"
-            fontWeight="900"
-            fill="#dfb76c"
-            textAnchor="middle"
-          >
-            {card.value}M
-          </text>
-        </g>
-
-        {/* Bottom-Right Value Badge */}
-        <g transform="translate(262, 382)">
-          <circle
-            cx="0"
-            cy="0"
-            r="18"
-            fill="#0f0f17"
-            stroke="#dfb76c"
-            strokeWidth="2.5"
-          />
-          <text
-            x="0"
-            y="5"
-            fontFamily="sans-serif"
-            fontSize="15"
-            fontWeight="900"
-            fill="#dfb76c"
-            textAnchor="middle"
-          >
-            {card.value}M
-          </text>
-        </g>
-
-        {/* Central Property Icon & Color Emblem */}
         <g transform="translate(150, 210)">
           <circle
             cx="0"
@@ -1032,112 +879,107 @@ export const CardShell: React.FC<CardShellProps> = ({
     );
   }
 
-  // --- MONEY CARDS DESIGN (Requirement 6: Enhanced Top-Left Value Badge) ---
+  // --- MONEY CARDS DESIGN ---
+  if (card.type === "Money") {
+    return (
+      <svg
+        viewBox="0 0 300 420"
+        xmlns="http://www.w3.org/2000/svg"
+        role="img"
+        className="w-full h-full select-none pointer-events-none"
+      >
+        <title>{accessibleTitle}</title>
+        <rect
+          x="5"
+          y="5"
+          width="290"
+          height="410"
+          rx="20"
+          fill="#143823"
+          stroke="#81c784"
+          strokeWidth="3.5"
+        />
+
+        <ValueBadge x={38} y={38} value={card.value} />
+        <ValueBadge x={262} y={382} value={card.value} />
+
+        <g transform="translate(150, 210)">
+          <circle
+            cx="0"
+            cy="0"
+            r="55"
+            fill="#0f0f17"
+            stroke="#dfb76c"
+            strokeWidth="3"
+          />
+          <circle
+            cx="0"
+            cy="0"
+            r="48"
+            fill="none"
+            stroke="#dfb76c"
+            strokeWidth="1"
+            strokeDasharray="4 2"
+          />
+          <text
+            x="0"
+            y="12"
+            fontFamily="Impact, sans-serif"
+            fontSize="36"
+            fontWeight="900"
+            fill="#dfb76c"
+            textAnchor="middle"
+          >
+            ${card.value}M
+          </text>
+        </g>
+
+        <text
+          x="150"
+          y="350"
+          fontFamily="sans-serif"
+          fontSize="11"
+          fontWeight="bold"
+          fill="#81c784"
+          textAnchor="middle"
+        >
+          Bankable Cash Asset
+        </text>
+      </svg>
+    );
+  }
+
+  // Fallback rendering for any unhandled card type
   return (
     <svg
       viewBox="0 0 300 420"
       xmlns="http://www.w3.org/2000/svg"
+      role="img"
       className="w-full h-full select-none pointer-events-none"
     >
+      <title>{accessibleTitle}</title>
       <rect
         x="5"
         y="5"
         width="290"
         height="410"
         rx="20"
-        fill="#143823"
-        stroke="#81c784"
+        fill="#1e293b"
+        stroke="#dfb76c"
         strokeWidth="3.5"
       />
-
-      {/* Enhanced Top-Left Value Badge (Requirement 6) */}
-      <g transform="translate(38, 38)">
-        <circle
-          cx="0"
-          cy="0"
-          r="18"
-          fill="#0f0f17"
-          stroke="#dfb76c"
-          strokeWidth="2.5"
-        />
-        <text
-          x="0"
-          y="5"
-          fontFamily="sans-serif"
-          fontSize="15"
-          fontWeight="900"
-          fill="#dfb76c"
-          textAnchor="middle"
-        >
-          {card.value}M
-        </text>
-      </g>
-
-      {/* Bottom-Right Value Badge */}
-      <g transform="translate(262, 382)">
-        <circle
-          cx="0"
-          cy="0"
-          r="18"
-          fill="#0f0f17"
-          stroke="#dfb76c"
-          strokeWidth="2.5"
-        />
-        <text
-          x="0"
-          y="5"
-          fontFamily="sans-serif"
-          fontSize="15"
-          fontWeight="900"
-          fill="#dfb76c"
-          textAnchor="middle"
-        >
-          {card.value}M
-        </text>
-      </g>
-
-      {/* Center Gold Vault Coin Shield */}
-      <g transform="translate(150, 210)">
-        <circle
-          cx="0"
-          cy="0"
-          r="55"
-          fill="#0f0f17"
-          stroke="#dfb76c"
-          strokeWidth="3"
-        />
-        <circle
-          cx="0"
-          cy="0"
-          r="48"
-          fill="none"
-          stroke="#dfb76c"
-          strokeWidth="1"
-          strokeDasharray="4 2"
-        />
-        <text
-          x="0"
-          y="12"
-          fontFamily="Impact, sans-serif"
-          fontSize="36"
-          fontWeight="900"
-          fill="#dfb76c"
-          textAnchor="middle"
-        >
-          ${card.value}M
-        </text>
-      </g>
-
+      <ValueBadge x={38} y={38} value={card.value} />
+      <ValueBadge x={262} y={382} value={card.value} />
       <text
         x="150"
-        y="350"
+        y="210"
         fontFamily="sans-serif"
-        fontSize="11"
-        fontWeight="bold"
-        fill="#81c784"
+        fontSize="16"
+        fontWeight="900"
+        fill="#ffffff"
         textAnchor="middle"
       >
-        Bankable Cash Asset
+        {card.name.toUpperCase()}
       </text>
     </svg>
   );

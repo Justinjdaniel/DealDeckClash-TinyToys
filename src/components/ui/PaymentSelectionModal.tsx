@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Card, PropertyCard, WildcardCard } from "../../types/game";
 import { PlayingCard } from "../../features/cards/PlayingCard";
 import { Coins, Building2, Check, AlertCircle } from "lucide-react";
@@ -12,6 +12,39 @@ interface PaymentSelectionModalProps {
   onConfirmPayment: (selectedCardIds: string[]) => void;
 }
 
+interface SelectableAssetCardProps {
+  card: Card;
+  isSelected: boolean;
+  onToggle: (id: string) => void;
+}
+
+const SelectableAssetCard: React.FC<SelectableAssetCardProps> = ({
+  card,
+  isSelected,
+  onToggle,
+}) => (
+  <button
+    type="button"
+    onClick={() => onToggle(card.id)}
+    aria-pressed={isSelected}
+    aria-label={`${card.name}, value ${card.value}M`}
+    className={`relative rounded-xl p-0.5 border transition-all focus:outline-none focus:ring-2 focus:ring-casino-gold ${
+      isSelected
+        ? "ring-2 ring-casino-gold border-casino-gold bg-casino-gold/20 scale-105"
+        : "border-white/10 opacity-70 hover:opacity-100"
+    }`}
+  >
+    <div className="w-full h-16">
+      <PlayingCard card={card} />
+    </div>
+    {isSelected && (
+      <div className="absolute -top-1 -right-1 bg-casino-gold text-black rounded-full w-4 h-4 flex items-center justify-center text-[9px] font-black z-20">
+        ✓
+      </div>
+    )}
+  </button>
+);
+
 export const PaymentSelectionModal: React.FC<PaymentSelectionModalProps> = ({
   amount,
   reason,
@@ -21,6 +54,8 @@ export const PaymentSelectionModal: React.FC<PaymentSelectionModalProps> = ({
 }) => {
   const { playSound } = useGamifiedAudio();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const confirmBtnRef = useRef<HTMLButtonElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const allAssets: Card[] = [...bankCards, ...propertyCards];
   const totalAvailableValue = allAssets.reduce((sum, c) => sum + c.value, 0);
@@ -28,11 +63,38 @@ export const PaymentSelectionModal: React.FC<PaymentSelectionModalProps> = ({
   const selectedCards = allAssets.filter((c) => selectedIds.includes(c.id));
   const selectedTotalValue = selectedCards.reduce((sum, c) => sum + c.value, 0);
 
-  // Valid if selected total meets or exceeds debt, OR if player selects all available assets (short/bankrupt)
   const isValid =
     allAssets.length === 0 ||
     selectedTotalValue >= amount ||
     (totalAvailableValue < amount && selectedIds.length === allAssets.length);
+
+  useEffect(() => {
+    if (confirmBtnRef.current) {
+      confirmBtnRef.current.focus();
+    }
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Tab" && containerRef.current) {
+        const focusables = containerRef.current.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+        );
+        if (focusables.length === 0) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const toggleSelectCard = (id: string) => {
     playSound("click");
@@ -54,7 +116,10 @@ export const PaymentSelectionModal: React.FC<PaymentSelectionModalProps> = ({
       aria-label="Manual Payment Selection Dialog"
       className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto"
     >
-      <div className="max-w-md w-full glass-panel rounded-2xl p-5 border-2 border-casino-gold shadow-gold-glow animate-[scaleIn_0.2s_ease-out] flex flex-col my-auto">
+      <div
+        ref={containerRef}
+        className="max-w-md w-full glass-panel rounded-2xl p-5 border-2 border-casino-gold shadow-gold-glow animate-[scaleIn_0.2s_ease-out] flex flex-col my-auto"
+      >
         <div className="text-center mb-3">
           <Coins className="w-8 h-8 text-casino-gold mx-auto mb-1 animate-bounce" />
           <h2 className="text-base font-serif font-black text-white">
@@ -109,30 +174,14 @@ export const PaymentSelectionModal: React.FC<PaymentSelectionModalProps> = ({
             </span>
             {bankCards.length > 0 ? (
               <div className="grid grid-cols-4 gap-2">
-                {bankCards.map((card) => {
-                  const isSelected = selectedIds.includes(card.id);
-                  return (
-                    <button
-                      type="button"
-                      key={card.id}
-                      onClick={() => toggleSelectCard(card.id)}
-                      className={`relative rounded-xl p-0.5 border transition-all ${
-                        isSelected
-                          ? "ring-2 ring-casino-gold border-casino-gold bg-casino-gold/20 scale-105"
-                          : "border-white/10 opacity-70 hover:opacity-100"
-                      }`}
-                    >
-                      <div className="w-full h-16">
-                        <PlayingCard card={card} />
-                      </div>
-                      {isSelected && (
-                        <div className="absolute -top-1 -right-1 bg-casino-gold text-black rounded-full w-4 h-4 flex items-center justify-center text-[9px] font-black z-20">
-                          ✓
-                        </div>
-                      )}
-                    </button>
-                  );
-                })}
+                {bankCards.map((card) => (
+                  <SelectableAssetCard
+                    key={card.id}
+                    card={card}
+                    isSelected={selectedIds.includes(card.id)}
+                    onToggle={toggleSelectCard}
+                  />
+                ))}
               </div>
             ) : (
               <p className="text-[10px] text-gray-500 italic">
@@ -149,30 +198,14 @@ export const PaymentSelectionModal: React.FC<PaymentSelectionModalProps> = ({
             </span>
             {propertyCards.length > 0 ? (
               <div className="grid grid-cols-4 gap-2">
-                {propertyCards.map((card) => {
-                  const isSelected = selectedIds.includes(card.id);
-                  return (
-                    <button
-                      type="button"
-                      key={card.id}
-                      onClick={() => toggleSelectCard(card.id)}
-                      className={`relative rounded-xl p-0.5 border transition-all ${
-                        isSelected
-                          ? "ring-2 ring-casino-gold border-casino-gold bg-casino-gold/20 scale-105"
-                          : "border-white/10 opacity-70 hover:opacity-100"
-                      }`}
-                    >
-                      <div className="w-full h-16">
-                        <PlayingCard card={card} />
-                      </div>
-                      {isSelected && (
-                        <div className="absolute -top-1 -right-1 bg-casino-gold text-black rounded-full w-4 h-4 flex items-center justify-center text-[9px] font-black z-20">
-                          ✓
-                        </div>
-                      )}
-                    </button>
-                  );
-                })}
+                {propertyCards.map((card) => (
+                  <SelectableAssetCard
+                    key={card.id}
+                    card={card}
+                    isSelected={selectedIds.includes(card.id)}
+                    onToggle={toggleSelectCard}
+                  />
+                ))}
               </div>
             ) : (
               <p className="text-[10px] text-gray-500 italic">
@@ -183,9 +216,10 @@ export const PaymentSelectionModal: React.FC<PaymentSelectionModalProps> = ({
         </div>
 
         <button
+          ref={confirmBtnRef}
           onClick={handleConfirm}
           disabled={!isValid}
-          className={`w-full py-2.5 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1.5 ${
+          className={`w-full py-2.5 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-casino-gold ${
             isValid
               ? "bg-gradient-to-r from-amber-500 via-casino-gold to-yellow-400 text-black shadow-gold-glow hover:scale-[1.02] active:scale-95"
               : "bg-white/5 text-gray-500 cursor-not-allowed border border-white/5"

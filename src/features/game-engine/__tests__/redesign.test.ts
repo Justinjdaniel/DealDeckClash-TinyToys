@@ -3,8 +3,13 @@ import { createDeck } from "../deck";
 import { ActionCard, WildcardCard } from "../../../types/game";
 
 describe("DealDeckClash Game Redesign Tests", () => {
-  it("should create deck containing House and Hotel cards", () => {
+  it("should generate exact deck counts for House, Hotel, Pass Go, 1M cash, Wildcards, and Rent", () => {
     const deck = createDeck();
+
+    const m1Cards = deck.filter((c) => c.type === "Money" && c.value === 1);
+    const passGoCards = deck.filter(
+      (c) => c.type === "Action" && (c as ActionCard).actionType === "Pass Go",
+    );
     const houseCards = deck.filter(
       (c) => c.type === "Action" && (c as ActionCard).actionType === "House",
     );
@@ -12,14 +17,6 @@ describe("DealDeckClash Game Redesign Tests", () => {
       (c) => c.type === "Action" && (c as ActionCard).actionType === "Hotel",
     );
 
-    expect(houseCards.length).toBe(3);
-    expect(hotelCards.length).toBe(2);
-    expect(houseCards[0].value).toBe(3);
-    expect(hotelCards[0].value).toBe(4);
-  });
-
-  it("should identify 10-color Joker wildcards vs 2-color Dual wildcards", () => {
-    const deck = createDeck();
     const jokerCards = deck.filter(
       (c) =>
         c.type === "Wildcard" &&
@@ -29,14 +26,6 @@ describe("DealDeckClash Game Redesign Tests", () => {
     const dualWildcards = deck.filter(
       (c) => c.type === "Wildcard" && (c as WildcardCard).colors.length === 2,
     );
-
-    expect(jokerCards.length).toBeGreaterThan(0);
-    expect(dualWildcards.length).toBeGreaterThan(0);
-    expect((dualWildcards[0] as WildcardCard).colors.length).toBe(2);
-  });
-
-  it("should identify Rent cards for all-black design", () => {
-    const deck = createDeck();
     const rentCards = deck.filter(
       (c) =>
         c.type === "Action" &&
@@ -44,7 +33,13 @@ describe("DealDeckClash Game Redesign Tests", () => {
           (c as ActionCard).actionType === "Multi-Rent"),
     );
 
-    expect(rentCards.length).toBeGreaterThan(0);
-    expect((rentCards[0] as ActionCard).rentColors).toBeDefined();
+    expect(m1Cards.length).toBe(4);
+    expect(passGoCards.length).toBe(7);
+    expect(houseCards.length).toBe(3);
+    expect(hotelCards.length).toBe(2);
+    expect(jokerCards.length).toBe(2);
+    expect(dualWildcards.length).toBe(9);
+    expect(rentCards.length).toBe(13);
+    expect(deck.length).toBe(99);
   });
 });

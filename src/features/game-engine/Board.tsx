@@ -691,7 +691,7 @@ export const Board: React.FC<BoardProps> = ({
                       {set.cards.map((card, idx) => (
                         <div
                           key={card.id}
-                          className="w-12 h-18 flex-shrink-0 relative shadow-md"
+                          className="w-12 h-[4.5rem] flex-shrink-0 relative shadow-md"
                           style={{ zIndex: idx }}
                         >
                           <PlayingCard card={card} />
