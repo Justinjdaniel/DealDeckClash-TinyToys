@@ -6,6 +6,7 @@ import {
   checkWinCondition,
 } from "../rules";
 import { dispatchAction } from "../api";
+import { generateCandidateMoves } from "../bot";
 import {
   GameState,
   GameAction,
@@ -15,6 +16,46 @@ import {
 } from "../../../types/game";
 
 describe("Monopoly Deal Game Engine Tests", () => {
+  const createInitialState = (): GameState => ({
+    gameId: "test-session",
+    status: "PLAYING",
+    players: [
+      {
+        id: "human",
+        name: "Player 1",
+        isBot: false,
+        hand: [
+          { id: "cash-5m", name: "5M Cash", type: "Money", value: 5 },
+          {
+            id: "prop-brown-1",
+            name: "Baltic",
+            type: "Property",
+            value: 1,
+            color: "Brown",
+          },
+        ],
+        bank: [],
+        properties: [],
+      },
+      {
+        id: "bot",
+        name: "Bot Opponent",
+        isBot: true,
+        hand: [],
+        bank: [],
+        properties: [],
+      },
+    ],
+    currentPlayerIndex: 0,
+    deck: [],
+    discardPile: [],
+    actionPointsLeft: 3,
+    currentTurnActionsPerformed: 0,
+    winnerId: null,
+    reactionQueue: null,
+    pendingDiscardPlayerId: null,
+    logs: [],
+  });
   describe("Deck and Properties Restructuring", () => {
     it("should generate a standard Monopoly Deal deck of 99 cards", () => {
       const deck = createDeck();
@@ -165,46 +206,6 @@ describe("Monopoly Deal Game Engine Tests", () => {
   });
 
   describe("Reducer Dispatcher Actions", () => {
-    const createInitialState = (): GameState => ({
-      gameId: "test-session",
-      status: "PLAYING",
-      players: [
-        {
-          id: "human",
-          name: "Player 1",
-          isBot: false,
-          hand: [
-            { id: "cash-5m", name: "5M Cash", type: "Money", value: 5 },
-            {
-              id: "prop-brown-1",
-              name: "Baltic",
-              type: "Property",
-              value: 1,
-              color: "Brown",
-            },
-          ],
-          bank: [],
-          properties: restructureProperties([]),
-        },
-        {
-          id: "bot",
-          name: "AI Bot",
-          isBot: true,
-          hand: [],
-          bank: [],
-          properties: restructureProperties([]),
-        },
-      ],
-      currentPlayerIndex: 0,
-      deck: [],
-      discardPile: [],
-      actionPointsLeft: 3,
-      winnerId: null,
-      reactionQueue: null,
-      pendingDiscardPlayerId: null,
-      logs: [],
-    });
-
     it("should allow banking a cash card and spend 1 action point", () => {
       const state = createInitialState();
       const action: GameAction = {
@@ -502,6 +503,85 @@ describe("Monopoly Deal Game Engine Tests", () => {
 
       const res = dispatchAction(state, toggleAction);
       expect(res.accepted).toBe(false);
+    });
+  });
+
+  describe("Candidate Move Generator Tests", () => {
+    it("should generate candidate moves for properties, money, actions, and end turn", () => {
+      const state = createInitialState();
+      const bot = state.players.find((p) => p.id === "bot")!;
+      bot.hand = [
+        {
+          id: "p1",
+          name: "Boardwalk",
+          type: "Property",
+          value: 4,
+          color: "Dark Blue",
+        },
+        { id: "m1", name: "2M Cash", type: "Money", value: 2 },
+        {
+          id: "a1",
+          name: "Pass Go",
+          type: "Action",
+          value: 1,
+          actionType: "Pass Go",
+        },
+      ];
+
+      const moves = generateCandidateMoves(state, "bot");
+      expect(moves.length).toBeGreaterThan(0);
+      const categories = moves.map((m) => m.category);
+      expect(categories).toContain("PROPERTY");
+      expect(categories).toContain("MONEY");
+      expect(categories).toContain("ACTION");
+      expect(categories).toContain("END_TURN");
+    });
+
+    it("should generate wildcard move options for each available color", () => {
+      const state = createInitialState();
+      const bot = state.players.find((p) => p.id === "bot")!;
+      bot.hand = [
+        {
+          id: "w1",
+          name: "Wildcard Blue/Green",
+          type: "Wildcard",
+          value: 4,
+          colors: ["Dark Blue", "Green"],
+          currentColor: null,
+        },
+      ];
+
+      const moves = generateCandidateMoves(state, "bot");
+      const wildcardMoves = moves.filter((m) => m.cardId === "w1");
+      expect(wildcardMoves.length).toBe(2);
+      const descriptions = wildcardMoves.map((m) => m.description);
+      expect(descriptions.some((d) => d.includes("Dark Blue"))).toBe(true);
+      expect(descriptions.some((d) => d.includes("Green"))).toBe(true);
+    });
+
+    it("should generate overflow discard candidate when hand exceeds 7 in DISCARDING status", () => {
+      const state = createInitialState();
+      state.status = "DISCARDING";
+      state.pendingDiscardPlayerId = "bot";
+      const bot = state.players.find((p) => p.id === "bot")!;
+      bot.hand = [
+        { id: "c1", name: "1M", type: "Money", value: 1 },
+        { id: "c2", name: "1M", type: "Money", value: 1 },
+        { id: "c3", name: "2M", type: "Money", value: 2 },
+        { id: "c4", name: "2M", type: "Money", value: 2 },
+        { id: "c5", name: "3M", type: "Money", value: 3 },
+        { id: "c6", name: "3M", type: "Money", value: 3 },
+        { id: "c7", name: "4M", type: "Money", value: 4 },
+        { id: "c8", name: "5M", type: "Money", value: 5 },
+      ];
+
+      const moves = generateCandidateMoves(state, "bot");
+      expect(moves.length).toBe(1);
+      expect(moves[0].category).toBe("DISCARD");
+      const payload = moves[0].action.payload;
+      if ("cardIds" in payload) {
+        expect(payload.cardIds.length).toBe(1);
+      }
     });
   });
 });

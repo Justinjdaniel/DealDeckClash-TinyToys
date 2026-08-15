@@ -111,12 +111,13 @@ export const Board: React.FC<BoardProps> = ({
   const botTurnKey = isBotActive
     ? `${state.status}-${state.currentPlayerIndex}-${state.actionPointsLeft}-${state.reactionQueue ? "rx" : "norx"}-${state.players[state.currentPlayerIndex].hand.length}`
     : "idle";
+  const hasReactionQueue = Boolean(state.reactionQueue);
+  const currentStatus = state.status;
 
   useEffect(() => {
     if (!isBotActive) return;
-    const currentStatus = state.status;
     if (currentStatus !== "PLAYING" && currentStatus !== "DISCARDING") return;
-    if (state.reactionQueue) return;
+    if (hasReactionQueue) return;
 
     let active = true;
 
@@ -155,12 +156,12 @@ export const Board: React.FC<BoardProps> = ({
       active = false;
       clearTimeout(timer);
     };
-  }, [botTurnKey, botStyle, bot?.id, isBotActive, !!state.reactionQueue]);
+  }, [bot, botTurnKey, botStyle, currentStatus, hasReactionQueue, isBotActive]);
 
   // AI bot reaction resolution with sanitized primitive dependencies
   useEffect(() => {
     const rx = state.reactionQueue;
-    if (!rx || rx.targetPlayerId !== bot?.id) return;
+    if (!rx || !bot || rx.targetPlayerId !== bot.id) return;
 
     let active = true;
 
@@ -186,7 +187,7 @@ export const Board: React.FC<BoardProps> = ({
       active = false;
       clearTimeout(timer);
     };
-  }, [!!state.reactionQueue, bot?.id]);
+  }, [bot, state.reactionQueue]);
 
   // Completed set effect (replaces timed latestStateRef check)
   const completedSetsCount = human
