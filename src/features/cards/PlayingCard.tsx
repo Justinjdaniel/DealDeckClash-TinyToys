@@ -26,6 +26,13 @@ export const PlayingCard: React.FC<PlayingCardProps> = ({
   const { rotateX, rotateY, handleMouseMove, handleMouseLeave } =
     useCardPhysics();
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (onClick && (e.key === "Enter" || e.key === " ")) {
+      e.preventDefault();
+      onClick();
+    }
+  };
+
   return (
     <motion.div
       style={{
@@ -34,6 +41,10 @@ export const PlayingCard: React.FC<PlayingCardProps> = ({
         rotateY: isFlipped ? 0 : rotateY,
         z: isSelected ? 30 : 0,
       }}
+      tabIndex={onClick ? 0 : undefined}
+      role={onClick ? "button" : undefined}
+      aria-label={onClick ? card.name : undefined}
+      onKeyDown={onClick ? handleKeyDown : undefined}
       drag={isDraggable ? "y" : false}
       dragConstraints={{ top: -300, bottom: 0, left: 0, right: 0 }}
       dragElastic={0.2}
@@ -48,7 +59,7 @@ export const PlayingCard: React.FC<PlayingCardProps> = ({
         stiffness: 300,
         damping: 20,
       }}
-      className={`relative cursor-pointer transition-shadow rounded-2xl select-none ${
+      className={`relative cursor-pointer transition-shadow rounded-2xl select-none focus:outline-none focus:ring-2 focus:ring-casino-gold ${
         isSelected
           ? "ring-4 ring-casino-gold shadow-gold-glow bg-casino-gold/10"
           : "hover:shadow-[0_15px_30px_rgba(0,0,0,0.5)]"
