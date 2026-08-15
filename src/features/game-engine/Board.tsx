@@ -546,7 +546,7 @@ export const Board: React.FC<BoardProps> = ({
   return (
     <div className="w-full h-full flex flex-col justify-between overflow-hidden relative text-left">
       {/* Top HUD Header */}
-      <div className="px-3 sm:px-4 py-2 bg-black/50 border-b border-casino-gold/20 flex items-center justify-between relative z-20 backdrop-blur-md">
+      <div className="px-3 sm:px-4 py-2 bg-[#0c231c]/90 border-b-2 border-casino-gold/60 shadow-md flex items-center justify-between relative z-20 backdrop-blur-md">
         <div className="flex items-center gap-2">
           <Sparkles className="text-casino-gold w-4 h-4 animate-pulse" />
           <span className="font-serif font-black text-white text-xs sm:text-sm">
@@ -598,8 +598,10 @@ export const Board: React.FC<BoardProps> = ({
         <div className="p-3 bg-black/40 rounded-2xl border border-white/10 relative shadow-lg">
           <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-3">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-full bg-red-500/20 border border-red-500/40 flex items-center justify-center font-serif text-red-400 text-xs font-bold shadow-inner">
-                AI
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-200 via-casino-gold to-amber-700 p-0.5 shadow-lg shadow-black/50 relative flex-shrink-0">
+                <div className="w-full h-full rounded-full bg-emerald-950 flex items-center justify-center font-serif text-casino-gold text-xs font-black ring-1 ring-casino-gold/50">
+                  AI
+                </div>
               </div>
               <div>
                 <h4 className="text-xs font-black text-white leading-none flex items-center gap-1.5">
@@ -892,44 +894,69 @@ export const Board: React.FC<BoardProps> = ({
       )}
 
       {/* PLAYER PRIVATE HAND & CONTROLS FOOTER */}
-      <div className="px-3 sm:px-4 py-2.5 bg-black/60 border-t border-casino-gold/20 flex flex-col items-center relative z-20 backdrop-blur-md">
-        <div className="flex justify-between w-full items-center mb-2">
-          <span className="text-[9px] font-mono font-bold uppercase tracking-widest text-casino-gold flex items-center gap-1">
-            Private Hand ({human.hand.length}/7)
-          </span>
+      <div className="px-3 sm:px-4 pt-2 pb-3 bg-[#081f18]/90 border-t-2 border-casino-gold/50 flex flex-col items-center relative z-20 backdrop-blur-md shadow-2xl">
+        {/* HUD Controls row: Bottom Left hand badge & Bottom Right metallic End Turn button */}
+        <div className="flex justify-between w-full items-center mb-1 z-10 px-1">
+          {/* Bottom Left Circular Hand Count Badge */}
+          <div className="flex items-center gap-2">
+            <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-casino-goldDark via-casino-gold to-amber-200 p-0.5 shadow-lg flex items-center justify-center">
+              <div className="w-full h-full rounded-full bg-emerald-950 flex items-center justify-center font-mono font-black text-white text-xs ring-1 ring-casino-gold/40">
+                {human.hand.length}
+              </div>
+            </div>
+            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-casino-gold hidden sm:inline">
+              Hand Cards
+            </span>
+          </div>
 
-          {/* Prominent Gamified Manual End Turn Button */}
+          {/* Bottom Right Prominent Gold Metallic Action Button */}
           <button
             onClick={handleEndTurn}
             disabled={!isHumanTurn || state.status !== "PLAYING"}
             aria-label="End Turn"
-            className={`py-1.5 px-3 sm:px-4 rounded-xl text-[10px] sm:text-xs font-serif font-black flex items-center gap-1.5 transition-all shadow-lg focus:outline-none focus:ring-2 focus:ring-casino-gold ${
+            className={`py-2 px-5 rounded-full text-xs sm:text-sm font-serif font-black uppercase tracking-wider flex items-center gap-2 transition-all shadow-xl focus:outline-none focus:ring-2 focus:ring-casino-gold ${
               isHumanTurn && state.status === "PLAYING"
-                ? "bg-gradient-to-r from-amber-500 via-casino-gold to-yellow-400 text-black shadow-gold-glow hover:scale-105 active:scale-95 animate-pulse"
-                : "bg-white/10 text-gray-500 cursor-not-allowed border border-white/5"
+                ? "bg-gradient-to-r from-amber-600 via-casino-gold to-amber-300 text-black border border-amber-200/60 shadow-gold-glow hover:scale-105 active:scale-95 animate-pulse"
+                : "bg-zinc-800 text-gray-500 cursor-not-allowed border border-white/10"
             }`}
           >
-            <RefreshCw className="w-3.5 h-3.5" />
-            End Turn
+            <RefreshCw className="w-4 h-4" />
+            <span>End Turn</span>
           </button>
         </div>
 
-        {/* Fanned flex card hand queue */}
-        <div className="w-full flex overflow-x-auto gap-2 py-1 scrollbar-none items-center justify-start min-h-[120px] sm:min-h-[140px]">
-          {human.hand.map((card) => {
-            const isSelected = selectedHandCard?.id === card.id;
-            return (
-              <button
-                type="button"
-                key={card.id}
-                onClick={() => handleHandCardClick(card)}
-                aria-label={`Select hand card ${card.name}`}
-                className="w-16 h-24 sm:w-20 sm:h-28 flex-shrink-0 text-left focus:outline-none focus:ring-2 focus:ring-casino-gold rounded-2xl"
-              >
-                <PlayingCard card={card} isSelected={isSelected} />
-              </button>
-            );
-          })}
+        {/* Curved Card Fan Layout */}
+        <div className="w-full flex items-center justify-center pt-2 pb-1 overflow-visible relative min-h-[130px] sm:min-h-[150px]">
+          <div className="flex items-center justify-center -space-x-8 sm:-space-x-10 max-w-full px-4 overflow-x-auto overflow-y-visible scrollbar-none py-2">
+            {human.hand.map((card, idx) => {
+              const isSelected = selectedHandCard?.id === card.id;
+              const total = human.hand.length;
+              const mid = (total - 1) / 2;
+              const offset = idx - mid;
+              const rotateDeg = total > 1 ? offset * 4 : 0;
+              const translateY = total > 1 ? Math.abs(offset) * 3 : 0;
+
+              return (
+                <div
+                  key={card.id}
+                  style={{
+                    transform: `rotate(${rotateDeg}deg) translateY(${translateY}px)`,
+                    zIndex: isSelected ? 30 : idx + 1,
+                  }}
+                  className="transition-all duration-200 ease-out hover:-translate-y-6 hover:scale-110 hover:z-40 flex-shrink-0 cursor-pointer"
+                >
+                  <button
+                    type="button"
+                    onClick={() => handleHandCardClick(card)}
+                    aria-label={`Select hand card ${card.name}`}
+                    className="w-16 h-24 sm:w-20 sm:h-28 flex-shrink-0 text-left focus:outline-none focus:ring-2 focus:ring-casino-gold rounded-2xl block"
+                  >
+                    <PlayingCard card={card} isSelected={isSelected} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 
