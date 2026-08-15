@@ -7,9 +7,8 @@ import {
   ActionCard,
   GameAction,
 } from "../../types/game";
-import { BotStyle, evaluateBotTurn } from "./bot";
+import { BotStyle } from "./bot";
 import { COLOR_HEX } from "./deck";
-import { findJSNInHand } from "./rules";
 import {
   Coins,
   AlertTriangle,
@@ -23,6 +22,8 @@ import confetti from "canvas-confetti";
 import { useGamifiedAudio } from "../audio/AudioContext";
 import { PlayingCard } from "../cards/PlayingCard";
 import { XPBar } from "../../components/ui/XPBar";
+import { BotSpeechBubble } from "../../components/ui/BotSpeechBubble";
+import { useBotController } from "../../hooks/useBotController";
 
 interface BoardProps {
   state: GameState;
@@ -55,18 +56,8 @@ export const Board: React.FC<BoardProps> = ({
 }) => {
   const { playSound } = useGamifiedAudio();
   const [selectedHandCard, setSelectedHandCard] = useState<Card | null>(null);
-  const [botCommentary, setBotCommentary] = useState<string>("");
 
-  const latestStateRef = useRef(state);
-  const onDispatchRef = useRef(onDispatch);
-  const playSoundRef = useRef(playSound);
   const victoryTriggeredRef = useRef(false);
-
-  useEffect(() => {
-    latestStateRef.current = state;
-    onDispatchRef.current = onDispatch;
-    playSoundRef.current = playSound;
-  }, [state, onDispatch, playSound]);
 
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [targetSelectOpen, setTargetSelectOpen] = useState(false);
@@ -88,107 +79,33 @@ export const Board: React.FC<BoardProps> = ({
   const human = state.players.find((p) => !p.isBot);
   const isHumanTurn = state.players[state.currentPlayerIndex].id === human?.id;
 
+  // AI bot controller handles bot decision timing, weights, and action dispatch
+  const { botCommentary, botWeight, tacticalExplanation } = useBotController({
+    state,
+    onDispatch,
+    botStyle,
+    playSound,
+  });
+
   // Trigger win or lose celebration once
   useEffect(() => {
     if (state.status === "WINNER") {
       if (!victoryTriggeredRef.current) {
         victoryTriggeredRef.current = true;
         if (state.winnerId === human?.id) {
-          playSoundRef.current("victoryFanfare");
+          playSound("victoryFanfare");
           confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
           unlockAchievement("VICTORY");
         } else {
-          playSoundRef.current("lossMelody");
+          playSound("lossMelody");
         }
       }
     } else {
       victoryTriggeredRef.current = false;
     }
-  }, [state.status, state.winnerId, human?.id, unlockAchievement]);
+  }, [state.status, state.winnerId, human?.id, unlockAchievement, playSound]);
 
-  // AI bot play logic loop with sanitized primitive dependencies
-  const isBotActive = !isHumanTurn && bot;
-  const botTurnKey = isBotActive
-    ? `${state.status}-${state.currentPlayerIndex}-${state.actionPointsLeft}-${state.reactionQueue ? "rx" : "norx"}-${state.players[state.currentPlayerIndex].hand.length}`
-    : "idle";
-
-  useEffect(() => {
-    if (!isBotActive) return;
-    const currentStatus = state.status;
-    if (currentStatus !== "PLAYING" && currentStatus !== "DISCARDING") return;
-    if (state.reactionQueue) return;
-
-    let active = true;
-
-    const timer = setTimeout(() => {
-      if (!active) return;
-
-      const currentState = latestStateRef.current;
-      if (!bot) return;
-      const decision = evaluateBotTurn(currentState, bot.id, botStyle);
-
-      if (decision.intentReason) {
-        setBotCommentary(decision.intentReason);
-      }
-
-      if (decision.action.type === "PLAY_CARD") {
-        playSoundRef.current("cardPlay");
-        onDispatchRef.current({
-          type: "PLAY_CARD",
-          payload: decision.action.payload,
-        });
-      } else if (decision.action.type === "DISCARD_OVERFLOW") {
-        playSoundRef.current("cardSweep");
-        onDispatchRef.current({
-          type: "DISCARD_OVERFLOW",
-          payload: decision.action.payload,
-        });
-      } else if (decision.action.type === "END_TURN") {
-        onDispatchRef.current({
-          type: "END_TURN",
-          payload: decision.action.payload,
-        });
-      }
-    }, 1500);
-
-    return () => {
-      active = false;
-      clearTimeout(timer);
-    };
-  }, [botTurnKey, botStyle, bot?.id, isBotActive, !!state.reactionQueue]);
-
-  // AI bot reaction resolution with sanitized primitive dependencies
-  useEffect(() => {
-    const rx = state.reactionQueue;
-    if (!rx || rx.targetPlayerId !== bot?.id) return;
-
-    let active = true;
-
-    const timer = setTimeout(() => {
-      if (!active) return;
-
-      const jsn = findJSNInHand(bot);
-      if (jsn && Math.random() < 0.5) {
-        playSoundRef.current("jsnPlay");
-        onDispatchRef.current({
-          type: "RESPOND_TO_ACTION",
-          payload: { playerId: bot.id, useJSN: true, jsnCardId: jsn.id },
-        });
-      } else {
-        onDispatchRef.current({
-          type: "RESPOND_TO_ACTION",
-          payload: { playerId: bot.id, useJSN: false },
-        });
-      }
-    }, 1500);
-
-    return () => {
-      active = false;
-      clearTimeout(timer);
-    };
-  }, [!!state.reactionQueue, bot?.id]);
-
-  // Completed set effect (replaces timed latestStateRef check)
+  // Completed set effect
   const completedSetsCount = human
     ? human.properties.filter((s) => s.isComplete).length
     : 0;
@@ -201,7 +118,6 @@ export const Board: React.FC<BoardProps> = ({
   if (!human || !bot) return null;
 
   const handleHandCardClick = (card: Card) => {
-    // Gate handleHandCardClick on available action points
     if (
       !isHumanTurn ||
       state.status !== "PLAYING" ||
@@ -581,8 +497,20 @@ export const Board: React.FC<BoardProps> = ({
             </span>
           </div>
 
+          {/* Bot Tactical Speech Bubble */}
+          <BotSpeechBubble
+            commentary={
+              botCommentary ||
+              "Welcome to Deal Deck Clash. Prepare your best moves."
+            }
+            weight={botWeight}
+            tacticalExplanation={tacticalExplanation}
+            botStyle={botStyle}
+            botName={bot.name}
+          />
+
           {/* AI Property Sets */}
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2 mt-2">
             {bot.properties.map((set) => {
               if (set.cards.length === 0) return null;
               return (
@@ -611,34 +539,20 @@ export const Board: React.FC<BoardProps> = ({
           </div>
         </div>
 
-        {/* DECISION / LOGS SECTION */}
-        <div className="grid grid-cols-2 gap-3 items-stretch">
-          {/* Bot commentary bubbles */}
-          <div className="p-2.5 bg-black/30 rounded-xl border border-white/5 flex flex-col justify-between h-28">
-            <span className="text-[8px] text-casino-gold font-bold uppercase tracking-wider block border-b border-white/5 pb-1">
-              AI commentary
-            </span>
-            <p className="text-[10px] text-gray-300 italic leading-snug my-auto line-clamp-3">
-              {botCommentary ||
-                "Welcome to Deal Deck Clash. Place your bets and roll your cards."}
-            </p>
-          </div>
-
-          {/* Console Action Log */}
-          <div className="p-2.5 bg-black/30 rounded-xl border border-white/5 flex flex-col justify-between h-28">
-            <span className="text-[8px] text-casino-gold font-bold uppercase tracking-wider block border-b border-white/5 pb-1">
-              Board logs
-            </span>
-            <div className="flex-1 overflow-y-auto space-y-1 mt-1 text-[8px] font-mono text-gray-400 leading-tight">
-              {state.logs.slice(0, 5).map((log, i) => (
-                <div
-                  key={i}
-                  className="truncate border-b border-white/5 pb-0.5 last:border-none"
-                >
-                  {log}
-                </div>
-              ))}
-            </div>
+        {/* Console Action Log */}
+        <div className="p-2.5 bg-black/30 rounded-xl border border-white/5 flex flex-col justify-between h-24">
+          <span className="text-[8px] text-casino-gold font-bold uppercase tracking-wider block border-b border-white/5 pb-1">
+            Board console logs
+          </span>
+          <div className="flex-1 overflow-y-auto space-y-1 mt-1 text-[8px] font-mono text-gray-400 leading-tight">
+            {state.logs.slice(0, 5).map((log, i) => (
+              <div
+                key={i}
+                className="truncate border-b border-white/5 pb-0.5 last:border-none"
+              >
+                {log}
+              </div>
+            ))}
           </div>
         </div>
 
@@ -815,7 +729,7 @@ export const Board: React.FC<BoardProps> = ({
         </div>
       </div>
 
-      {/* Dynamic Action Menus & selectors (Rendered conditionally with plain React display handlers) */}
+      {/* Dynamic Action Menus & selectors */}
       {actionMenuOpen && selectedHandCard && (
         <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="max-w-sm w-full glass-panel rounded-2xl p-5 border border-casino-gold/40 shadow-gold-glow animate-[scaleIn_0.15s_ease-out]">
