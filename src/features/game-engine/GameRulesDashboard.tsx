@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { CustomGameRules } from "../../types/game";
 import { DEFAULT_CUSTOM_RULES } from "./rules";
 import { Play, RotateCcw, Shield, Trophy, Zap, Sliders } from "lucide-react";
@@ -15,6 +15,27 @@ export const GameRulesDashboard: React.FC<GameRulesDashboardProps> = ({
   onClose,
 }) => {
   const [rules, setRules] = useState<CustomGameRules>({ ...initialRules });
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Focus first focusable element inside modal on mount
+    const focusableElements =
+      containerRef.current?.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      );
+    if (focusableElements && focusableElements.length > 0) {
+      focusableElements[0].focus();
+    }
+
+    // Handle Escape key to close modal
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && onClose) {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
 
   const handleSetsChange = (delta: number) => {
     setRules((prev) => ({
@@ -53,11 +74,20 @@ export const GameRulesDashboard: React.FC<GameRulesDashboardProps> = ({
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto bg-[#181920] border border-gray-800 rounded-xl shadow-2xl p-6 text-white font-sans">
+    <div
+      ref={containerRef}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="dashboard-heading"
+      className="w-full max-w-4xl mx-auto bg-[#181920] border border-gray-800 rounded-xl shadow-2xl p-6 text-white font-sans"
+    >
       {/* Header */}
       <div className="border-b border-gray-800 pb-4 mb-6 flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-black uppercase tracking-wider text-yellow-400 flex items-center gap-2">
+          <h2
+            id="dashboard-heading"
+            className="text-2xl font-black uppercase tracking-wider text-yellow-400 flex items-center gap-2"
+          >
             <Sliders className="w-6 h-6 text-yellow-400" />
             Game Rules Dashboard
           </h2>
@@ -69,6 +99,7 @@ export const GameRulesDashboard: React.FC<GameRulesDashboardProps> = ({
         {onClose && (
           <button
             onClick={onClose}
+            aria-label="Close rules dashboard"
             className="text-gray-400 hover:text-white transition-colors text-xl font-bold px-3 py-1 rounded-lg hover:bg-gray-800"
           >
             ✕
@@ -98,6 +129,7 @@ export const GameRulesDashboard: React.FC<GameRulesDashboardProps> = ({
               <div className="flex items-center gap-3">
                 <button
                   type="button"
+                  aria-label="Decrease required property sets"
                   onClick={() => handleSetsChange(-1)}
                   disabled={rules.setsRequiredToFinish <= 1}
                   className="w-8 h-8 rounded-lg bg-gray-800 hover:bg-gray-700 disabled:opacity-40 disabled:hover:bg-gray-800 text-white font-extrabold flex items-center justify-center transition-all border border-gray-600"
@@ -109,6 +141,7 @@ export const GameRulesDashboard: React.FC<GameRulesDashboardProps> = ({
                 </span>
                 <button
                   type="button"
+                  aria-label="Increase required property sets"
                   onClick={() => handleSetsChange(1)}
                   disabled={rules.setsRequiredToFinish >= 10}
                   className="w-8 h-8 rounded-lg bg-gray-800 hover:bg-gray-700 disabled:opacity-40 disabled:hover:bg-gray-800 text-white font-extrabold flex items-center justify-center transition-all border border-gray-600"
@@ -134,66 +167,62 @@ export const GameRulesDashboard: React.FC<GameRulesDashboardProps> = ({
             <div className="space-y-3">
               {/* Deal Breakers */}
               <div className="flex items-center justify-between bg-[#15161d] p-3 rounded-lg border border-gray-700/50">
-                <span className="text-sm font-medium text-gray-300">
+                <label
+                  htmlFor="rule-deal-breakers"
+                  className="text-sm font-medium text-gray-300 cursor-pointer"
+                >
                   Allow "Deal Breakers"
-                </span>
-                <label className="relative inline-flex items-center cursor-pointer">
+                </label>
+                <div className="relative inline-flex items-center cursor-pointer">
                   <input
+                    id="rule-deal-breakers"
                     type="checkbox"
                     checked={rules.allowDealBreakers}
                     onChange={() => handleToggle("allowDealBreakers")}
                     className="sr-only peer"
                   />
                   <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
-                </label>
+                </div>
               </div>
 
               {/* Forced Deals */}
               <div className="flex items-center justify-between bg-[#15161d] p-3 rounded-lg border border-gray-700/50">
-                <span className="text-sm font-medium text-gray-300">
+                <label
+                  htmlFor="rule-forced-deals"
+                  className="text-sm font-medium text-gray-300 cursor-pointer"
+                >
                   Allow "Forced Deals"
-                </span>
-                <label className="relative inline-flex items-center cursor-pointer">
+                </label>
+                <div className="relative inline-flex items-center cursor-pointer">
                   <input
+                    id="rule-forced-deals"
                     type="checkbox"
                     checked={rules.allowForcedDeals}
                     onChange={() => handleToggle("allowForcedDeals")}
                     className="sr-only peer"
                   />
                   <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
-                </label>
+                </div>
               </div>
 
               {/* Rent Collection */}
               <div className="flex items-center justify-between bg-[#15161d] p-3 rounded-lg border border-gray-700/50">
-                <span className="text-sm font-medium text-gray-300">
+                <label
+                  htmlFor="rule-rent-collection"
+                  className="text-sm font-medium text-gray-300 cursor-pointer"
+                >
                   Allow Rent Collection
-                </span>
-                <label className="relative inline-flex items-center cursor-pointer">
+                </label>
+                <div className="relative inline-flex items-center cursor-pointer">
                   <input
+                    id="rule-rent-collection"
                     type="checkbox"
                     checked={rules.allowRentCollection}
                     onChange={() => handleToggle("allowRentCollection")}
                     className="sr-only peer"
                   />
                   <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
-                </label>
-              </div>
-
-              {/* Double the Rent */}
-              <div className="flex items-center justify-between bg-[#15161d] p-3 rounded-lg border border-gray-700/50">
-                <span className="text-sm font-medium text-gray-300">
-                  Allow Double the Rent
-                </span>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={rules.allowDoubleRent}
-                    onChange={() => handleToggle("allowDoubleRent")}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
-                </label>
+                </div>
               </div>
             </div>
           </div>
@@ -214,18 +243,22 @@ export const GameRulesDashboard: React.FC<GameRulesDashboardProps> = ({
             </p>
 
             <div className="flex items-center justify-between bg-[#15161d] p-3 rounded-lg border border-gray-700/50">
-              <span className="text-sm font-medium text-gray-300">
+              <label
+                htmlFor="rule-full-set-immunity"
+                className="text-sm font-medium text-gray-300 cursor-pointer"
+              >
                 Full Set Immunity from Steal
-              </span>
-              <label className="relative inline-flex items-center cursor-pointer">
+              </label>
+              <div className="relative inline-flex items-center cursor-pointer">
                 <input
+                  id="rule-full-set-immunity"
                   type="checkbox"
                   checked={rules.fullSetImmunity}
                   onChange={() => handleToggle("fullSetImmunity")}
                   className="sr-only peer"
                 />
                 <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
-              </label>
+              </div>
             </div>
           </div>
 
@@ -244,10 +277,14 @@ export const GameRulesDashboard: React.FC<GameRulesDashboardProps> = ({
             <div className="space-y-3">
               {/* Initial Hand Size */}
               <div className="flex items-center justify-between bg-[#15161d] p-3 rounded-lg border border-gray-700/50">
-                <span className="text-sm font-medium text-gray-300">
+                <label
+                  htmlFor="rule-hand-size"
+                  className="text-sm font-medium text-gray-300 cursor-pointer"
+                >
                   Initial Hand Size
-                </span>
+                </label>
                 <select
+                  id="rule-hand-size"
                   value={rules.initialHandSize}
                   onChange={(e) =>
                     handleSelectChange(
@@ -267,10 +304,14 @@ export const GameRulesDashboard: React.FC<GameRulesDashboardProps> = ({
 
               {/* Action Limit Per Turn */}
               <div className="flex items-center justify-between bg-[#15161d] p-3 rounded-lg border border-gray-700/50">
-                <span className="text-sm font-medium text-gray-300">
+                <label
+                  htmlFor="rule-action-limit"
+                  className="text-sm font-medium text-gray-300 cursor-pointer"
+                >
                   Action Limit Per Turn
-                </span>
+                </label>
                 <select
+                  id="rule-action-limit"
                   value={rules.actionLimitPerTurn}
                   onChange={(e) =>
                     handleSelectChange(
@@ -289,18 +330,22 @@ export const GameRulesDashboard: React.FC<GameRulesDashboardProps> = ({
 
               {/* Wildcards Allowed */}
               <div className="flex items-center justify-between bg-[#15161d] p-3 rounded-lg border border-gray-700/50">
-                <span className="text-sm font-medium text-gray-300">
+                <label
+                  htmlFor="rule-allow-wildcards"
+                  className="text-sm font-medium text-gray-300 cursor-pointer"
+                >
                   Wildcards Allowed
-                </span>
-                <label className="relative inline-flex items-center cursor-pointer">
+                </label>
+                <div className="relative inline-flex items-center cursor-pointer">
                   <input
+                    id="rule-allow-wildcards"
                     type="checkbox"
                     checked={rules.allowWildcards}
                     onChange={() => handleToggle("allowWildcards")}
                     className="sr-only peer"
                   />
                   <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
-                </label>
+                </div>
               </div>
             </div>
           </div>

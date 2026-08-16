@@ -100,7 +100,7 @@ export const Menu: React.FC<MenuProps> = ({ onStartGame }) => {
     useState<CustomGameRules>(DEFAULT_CUSTOM_RULES);
   const [showRulesDashboard, setShowRulesDashboard] = useState(false);
   const [roomCode, setRoomCode] = useState("");
-  const [showRulesModal, setShowRulesModal] = useState(false);
+  const [showHowToPlayModal, setShowHowToPlayModal] = useState(false);
   const [showCollectionModal, setShowCollectionModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
 
@@ -118,16 +118,6 @@ export const Menu: React.FC<MenuProps> = ({ onStartGame }) => {
   };
 
   return (
-    <div className="w-full h-full flex flex-col justify-between p-5 text-left relative">
-      {/* Lobby Top Panel */}
-      <div className="flex items-center justify-between border-b border-casino-gold/15 pb-4">
-        <div>
-          <h1 className="text-2xl font-serif font-black tracking-wide gold-text-shimmer">
-            DEAL CLASH
-          </h1>
-          <p className="text-[9px] text-casino-gold/70 uppercase tracking-widest font-mono">
-            Boardroom Battle Arena
-          </p>
     <div className="w-full h-full flex flex-col justify-between p-3 sm:p-5 text-white select-none overflow-y-auto relative bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
       {/* Background Toy Elements Glow */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
@@ -281,6 +271,19 @@ export const Menu: React.FC<MenuProps> = ({ onStartGame }) => {
 
         {activeTab === "solo" ? (
           <div className="space-y-3 animate-fadeIn">
+            {/* Custom Rules Configurator Bar */}
+            <button
+              onClick={() => {
+                playSound("click");
+                setShowRulesDashboard(true);
+              }}
+              className="w-full py-2.5 bg-slate-900/80 hover:bg-slate-800 border border-amber-500/40 text-amber-300 font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-md"
+            >
+              <Sliders className="w-4 h-4 text-amber-400" />
+              Configure Game Rules ({customRules.setsRequiredToFinish} Sets to
+              Win)
+            </button>
+
             {/* AI Personality Selector */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-[11px] font-bold text-slate-300">
@@ -345,19 +348,6 @@ export const Menu: React.FC<MenuProps> = ({ onStartGame }) => {
               </div>
             </div>
 
-            <button
-              onClick={() => {
-                playSound("click");
-                setShowRulesDashboard(true);
-              }}
-              className="w-full py-2.5 bg-[#20222c] hover:bg-[#282a36] border border-yellow-500/30 text-yellow-400 font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-md"
-            >
-              <Sliders className="w-4 h-4 text-yellow-400" />
-              Configure Game Rules ({customRules.setsRequiredToFinish} Sets to
-              Win)
-            </button>
-
-            <button
             {/* Primary CTA Play Button */}
             <motion.button
               whileHover={{ scale: 1.02 }}
@@ -474,16 +464,16 @@ export const Menu: React.FC<MenuProps> = ({ onStartGame }) => {
                     playSound("click");
                     setShowRulesDashboard(true);
                   }}
-                  className="w-full py-2.5 bg-[#20222c] hover:bg-[#282a36] border border-yellow-500/30 text-yellow-400 font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-md"
+                  className="w-full py-2 bg-slate-800 hover:bg-slate-700 border border-amber-500/30 text-amber-300 font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-md"
                 >
-                  <Sliders className="w-4 h-4 text-yellow-400" />
+                  <Sliders className="w-4 h-4 text-amber-400" />
                   Configure Game Rules ({customRules.setsRequiredToFinish} Sets)
                 </button>
 
-                <div className="space-y-2">
-                  <div className="p-2.5 bg-white/5 rounded-lg flex items-center justify-between text-xs">
-                    <span className="text-white font-bold">You (Ready)</span>
-                    <span className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
+                <div className="space-y-1.5 text-xs">
+                  <div className="p-2 bg-slate-800/60 rounded-lg flex items-center justify-between">
+                    <span className="text-slate-100 font-bold">You (Host)</span>
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
                   </div>
                   <div className="p-2 bg-slate-800/60 rounded-lg flex items-center justify-between">
                     <span className="text-slate-400">
@@ -516,7 +506,7 @@ export const Menu: React.FC<MenuProps> = ({ onStartGame }) => {
           </div>
         )}
 
-        {/* Secondary Action Buttons (Collection, How to Play, Stats) */}
+        {/* Secondary Action Buttons (Rules, Cards Vault, Stats) */}
         <div className="grid grid-cols-3 gap-2 pt-1">
           <button
             onClick={() => {
@@ -531,7 +521,7 @@ export const Menu: React.FC<MenuProps> = ({ onStartGame }) => {
           <button
             onClick={() => {
               playSound("click");
-              setShowRulesModal(true);
+              setShowHowToPlayModal(true);
             }}
             className="p-2 bg-slate-900/80 hover:bg-slate-800 border border-slate-800 rounded-xl flex flex-col items-center justify-center text-center gap-1 transition-colors"
           >
@@ -560,11 +550,23 @@ export const Menu: React.FC<MenuProps> = ({ onStartGame }) => {
         </span>
       </div>
 
-      {/* Modals & Overlay Drawers */}
+      {/* Rules Dashboard Modal Overlay */}
+      {showRulesDashboard && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <GameRulesDashboard
+            initialRules={customRules}
+            onSaveAndApply={(updatedRules) => {
+              setCustomRules(updatedRules);
+              setShowRulesDashboard(false);
+            }}
+            onClose={() => setShowRulesDashboard(false)}
+          />
+        </div>
+      )}
 
-      {/* Rules Modal */}
+      {/* How To Play Modal */}
       <AnimatePresence>
-        {showRulesModal && (
+        {showHowToPlayModal && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -578,7 +580,7 @@ export const Menu: React.FC<MenuProps> = ({ onStartGame }) => {
               className="bg-slate-900 border border-slate-700 rounded-2xl p-5 max-w-sm w-full space-y-4 shadow-2xl relative"
             >
               <button
-                onClick={() => setShowRulesModal(false)}
+                onClick={() => setShowHowToPlayModal(false)}
                 className="absolute top-4 right-4 p-1 rounded-lg bg-slate-800 text-slate-400 hover:text-white"
               >
                 <X className="w-4 h-4" />
@@ -622,7 +624,7 @@ export const Menu: React.FC<MenuProps> = ({ onStartGame }) => {
               </div>
 
               <button
-                onClick={() => setShowRulesModal(false)}
+                onClick={() => setShowHowToPlayModal(false)}
                 className="w-full py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-xl uppercase tracking-wider"
               >
                 GOT IT
@@ -632,25 +634,6 @@ export const Menu: React.FC<MenuProps> = ({ onStartGame }) => {
         )}
       </AnimatePresence>
 
-      {/* Rules Dashboard Modal Overlay */}
-      {showRulesDashboard && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <GameRulesDashboard
-            initialRules={customRules}
-            onSaveAndApply={(updatedRules) => {
-              setCustomRules(updatedRules);
-              setShowRulesDashboard(false);
-            }}
-            onClose={() => setShowRulesDashboard(false)}
-          />
-        </div>
-      )}
-
-      {/* Lobby Footer info */}
-      <div className="border-t border-white/5 pt-3.5 text-center text-[10px] text-gray-500 font-semibold leading-relaxed">
-        Full mobile gameplay layout. Decoupled dispatcher layer supports
-        WebSocket servers.
-      </div>
       {/* Cards Collection Showcase Modal */}
       <AnimatePresence>
         {showCollectionModal && (

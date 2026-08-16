@@ -9,7 +9,6 @@ describe("Custom Game Rules Mechanics", () => {
     allowDealBreakers: false,
     allowForcedDeals: false,
     allowRentCollection: true,
-    allowDoubleRent: true,
     fullSetImmunity: true,
     initialHandSize: 7,
     actionLimitPerTurn: 4,

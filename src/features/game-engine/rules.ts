@@ -16,7 +16,6 @@ export const DEFAULT_CUSTOM_RULES: CustomGameRules = {
   allowDealBreakers: true,
   allowForcedDeals: true,
   allowRentCollection: true,
-  allowDoubleRent: true,
   fullSetImmunity: false,
   initialHandSize: 5,
   actionLimitPerTurn: 3,

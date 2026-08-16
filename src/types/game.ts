@@ -94,7 +94,6 @@ export interface CustomGameRules {
   allowDealBreakers: boolean; // default: true
   allowForcedDeals: boolean; // default: true
   allowRentCollection: boolean; // default: true
-  allowDoubleRent: boolean; // default: true
   fullSetImmunity: boolean; // default: false
   initialHandSize: number; // default: 5
   actionLimitPerTurn: number; // default: 3

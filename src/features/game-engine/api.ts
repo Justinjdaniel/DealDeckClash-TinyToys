@@ -137,10 +137,11 @@ export const canDispatch = (state: GameState, action: GameAction): boolean => {
           if (!rules.allowDealBreakers) return false;
           return !!options?.targetColor;
         }
-        if (
-          actionCard.actionType === "Rent" ||
-          actionCard.actionType === "Multi-Rent"
-        ) {
+        if (actionCard.actionType === "Rent") {
+          if (!rules.allowRentCollection) return false;
+          return !!options?.color;
+        }
+        if (actionCard.actionType === "Multi-Rent") {
           if (!rules.allowRentCollection) return false;
           return !!options?.color;
         }
@@ -721,16 +722,20 @@ const validatePaymentSelection = (
 ): boolean => {
   if (!cardIds || cardIds.length === 0) return false;
 
+  const distinctCardIds = Array.from(new Set(cardIds));
+
   const allOnTableAssets = [
     ...from.bank,
     ...from.properties.flatMap((s) => s.cards),
   ];
   const allOnTableIds = new Set(allOnTableAssets.map((c) => c.id));
 
-  const allBelong = cardIds.every((id) => allOnTableIds.has(id));
+  const allBelong = distinctCardIds.every((id) => allOnTableIds.has(id));
   if (!allBelong) return false;
 
-  const selectedAssets = allOnTableAssets.filter((c) => cardIds.includes(c.id));
+  const selectedAssets = allOnTableAssets.filter((c) =>
+    distinctCardIds.includes(c.id),
+  );
   const selectedTotalValue = selectedAssets.reduce(
     (sum, c) => sum + c.value,
     0,
@@ -742,7 +747,8 @@ const validatePaymentSelection = (
 
   return (
     selectedTotalValue >= amount ||
-    (totalAvailableValue < amount && cardIds.length === allOnTableAssets.length)
+    (totalAvailableValue < amount &&
+      selectedAssets.length === allOnTableAssets.length)
   );
 };
 
@@ -905,7 +911,15 @@ const resolveReaction = (
         const targetSet = target.properties.find((set) =>
           set.cards.some((c) => c.id === targetCardId),
         );
-        if (rules.fullSetImmunity && targetSet && targetSet.isComplete) {
+        const swapSet = attacker.properties.find((set) =>
+          set.cards.some((c) => c.id === swapCardId),
+        );
+
+        if (
+          rules.fullSetImmunity &&
+          ((targetSet && targetSet.isComplete) ||
+            (swapSet && swapSet.isComplete))
+        ) {
           logMsg(
             `❌ Forced Deal failed: target property belongs to a completed set protected by Full Set Immunity!`,
           );
@@ -958,11 +972,20 @@ const resolveReaction = (
     }
   }
 
-  if (checkWinCondition(attacker, rules.setsRequiredToFinish)) {
+  const attackerWins = checkWinCondition(attacker, rules.setsRequiredToFinish);
+  const targetWins = checkWinCondition(target, rules.setsRequiredToFinish);
+
+  if (attackerWins) {
     state.status = "WINNER";
     state.winnerId = attacker.id;
     logMsg(
       `🏆 WINNER! ${attacker.name} has completed ${rules.setsRequiredToFinish} full sets and won!`,
+    );
+  } else if (targetWins) {
+    state.status = "WINNER";
+    state.winnerId = target.id;
+    logMsg(
+      `🏆 WINNER! ${target.name} has completed ${rules.setsRequiredToFinish} full sets and won!`,
     );
   }
 };

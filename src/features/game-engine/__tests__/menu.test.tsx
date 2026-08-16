@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from "vitest";
 import React from "react";
 import { Menu } from "../Menu";
 import { AudioProvider } from "../../audio/AudioContext";
+import { DEFAULT_CUSTOM_RULES } from "../rules";
 
 describe("Menu Component Redesign", () => {
   it("renders main title, user profile, coins, and play CTA", () => {
@@ -34,7 +35,11 @@ describe("Menu Component Redesign", () => {
     const playBtn = screen.getByText(/QUICK MATCH VS TACTICAL/);
     fireEvent.click(playBtn);
 
-    expect(handleStartGame).toHaveBeenCalledWith("Tactical");
+    expect(handleStartGame).toHaveBeenCalledWith(
+      "Tactical",
+      undefined,
+      DEFAULT_CUSTOM_RULES,
+    );
   });
 
   it("switches to online arena tab and back", () => {
