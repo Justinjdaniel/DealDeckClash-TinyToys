@@ -11,6 +11,8 @@ import {
   restructureProperties,
   calculateRent,
   HAND_LIMIT,
+  getPlayerPropertyCards,
+  getPlayerBankCards,
 } from "../features/game-engine/rules";
 import { PROPERTY_SET_REQS } from "../features/game-engine/deck";
 
@@ -109,13 +111,14 @@ export const TRAINED_BOT_MODELS: Record<BotStyle, ModelWeights> = {
 
 // Helper to evaluate property placement weight and explanation
 export const scorePropertyPlacement = (
-  currentCards: (PropertyCard | WildcardCard)[],
+  currentCards: (PropertyCard | WildcardCard)[] = [],
   targetColor: CardColor,
   cardToPlay: PropertyCard | WildcardCard,
   completedSetsCount: number,
   weights: ModelWeights,
 ): { weight: number; explanation: string } => {
-  const projectedSets = restructureProperties([...currentCards, cardToPlay]);
+  const safeCards = (currentCards || []).filter(Boolean);
+  const projectedSets = restructureProperties([...safeCards, cardToPlay]);
   const matchingSet = projectedSets.find((s) => s.color === targetColor);
   const setNowComplete = matchingSet?.isComplete;
 
@@ -133,7 +136,7 @@ export const scorePropertyPlacement = (
     }
   }
 
-  const existingCount = currentCards.filter((c) => {
+  const existingCount = safeCards.filter((c) => {
     if (c.type === "Property") return (c as PropertyCard).color === targetColor;
     if (c.type === "Wildcard")
       return (c as WildcardCard).currentColor === targetColor;
@@ -155,7 +158,7 @@ export const scorePropertyPlacement = (
 
 // Rank target opponent property cards for Sly Deal / Forced Deal attacks
 function getRankedOpponentProperties(
-  opponentSets: PropertySet[],
+  opponentSets: PropertySet[] = [],
 ): { card: PropertyCard | WildcardCard; color: CardColor; score: number }[] {
   const candidates: {
     card: PropertyCard | WildcardCard;
@@ -163,13 +166,24 @@ function getRankedOpponentProperties(
     score: number;
   }[] = [];
 
-  for (const set of opponentSets) {
-    if (set.isComplete || set.cards.length === 0) continue;
+  const safeSets: PropertySet[] = Array.isArray(opponentSets)
+    ? opponentSets
+    : Object.values(opponentSets || {});
+
+  for (const set of safeSets) {
+    if (
+      !set ||
+      set.isComplete ||
+      !Array.isArray(set.cards) ||
+      set.cards.length === 0
+    )
+      continue;
     const reqCount = PROPERTY_SET_REQS[set.color]?.count || 3;
     const closenessScore = set.cards.length / reqCount;
 
     for (const card of set.cards) {
-      const totalScore = closenessScore * 100 + card.value;
+      if (!card) continue;
+      const totalScore = closenessScore * 100 + (card.value || 0);
       candidates.push({ card, color: set.color, score: totalScore });
     }
   }
@@ -184,8 +198,8 @@ export const evaluateBotTurnWithBrain = (
   style: BotStyle = "Aggressive",
 ): BotDecision => {
   const weights = TRAINED_BOT_MODELS[style] || TRAINED_BOT_MODELS.Aggressive;
-  const bot = state.players.find((p) => p.id === botId);
-  const player = state.players.find((p) => p.id !== botId);
+  const bot = (state.players || []).find((p) => p?.id === botId);
+  const player = (state.players || []).find((p) => p?.id !== botId);
 
   if (!bot || !player) {
     return {
@@ -199,11 +213,19 @@ export const evaluateBotTurnWithBrain = (
     };
   }
 
+  const botHand = (bot.hand || []).filter(Boolean);
+  const botBankCards = getPlayerBankCards(bot);
+  const currentBotProps = getPlayerPropertyCards(bot);
+  const victimProps = getPlayerPropertyCards(player);
+  const victimHasProperties = victimProps.length > 0;
+
   // 1. DISCARDING OVERFLOW STATE
   if (state.status === "DISCARDING" && state.pendingDiscardPlayerId === botId) {
-    if (bot.hand.length > HAND_LIMIT) {
-      const sortedHand = [...bot.hand].sort((a, b) => a.value - b.value);
-      const toDiscard = sortedHand.slice(0, bot.hand.length - HAND_LIMIT);
+    if (botHand.length > HAND_LIMIT) {
+      const sortedHand = [...botHand].sort(
+        (a, b) => (a.value || 0) - (b.value || 0),
+      );
+      const toDiscard = sortedHand.slice(0, botHand.length - HAND_LIMIT);
       const discardIds = toDiscard.map((c) => c.id);
       const calculatedWeight = weights.DISCARD_PENALTY * toDiscard.length;
       return {
@@ -249,16 +271,21 @@ export const evaluateBotTurnWithBrain = (
     tacticalExplanation: string;
   }[] = [];
 
-  const completedSetsCount = bot.properties.filter((s) => s.isComplete).length;
-  const bankTotal = bot.bank.reduce((sum, c) => sum + c.value, 0);
-  const currentBotProps = bot.properties.flatMap((s) => s.cards);
+  const botSets: PropertySet[] = Array.isArray(bot.properties)
+    ? bot.properties
+    : Object.values(bot.properties || {});
+  const completedSetsCount = botSets.filter((s) => s?.isComplete).length;
+  const bankTotal = botBankCards.reduce((sum, c) => sum + (c?.value || 0), 0);
 
   // Evaluate cards in hand
-  for (const card of bot.hand) {
+  for (const card of botHand) {
+    if (!card) continue;
+
     // A. Property Wildcards
     if (card.type === "Wildcard") {
       const wildcard = card as WildcardCard;
-      for (const col of wildcard.colors) {
+      const colors = wildcard.colors || [];
+      for (const col of colors) {
         if (col === "Any") continue;
         const copyWildcard = { ...wildcard, currentColor: col };
         const scored = scorePropertyPlacement(
@@ -329,7 +356,10 @@ export const evaluateBotTurnWithBrain = (
       }
 
       if (action.actionType === "Deal Breaker") {
-        const playerCompleteSet = player.properties.find((s) => s.isComplete);
+        const playerSets: PropertySet[] = Array.isArray(player.properties)
+          ? player.properties
+          : Object.values(player.properties || {});
+        const playerCompleteSet = playerSets.find((s) => s?.isComplete);
         if (playerCompleteSet) {
           const weight = weights.DEAL_BREAKER;
           candidates.push({
@@ -349,7 +379,7 @@ export const evaluateBotTurnWithBrain = (
         }
       }
 
-      if (action.actionType === "Sly Deal") {
+      if (action.actionType === "Sly Deal" && victimHasProperties) {
         const rankedTargets = getRankedOpponentProperties(player.properties);
         if (rankedTargets.length > 0) {
           const bestTarget = rankedTargets[0];
@@ -371,10 +401,11 @@ export const evaluateBotTurnWithBrain = (
         }
       }
 
-      if (action.actionType === "Forced Deal") {
+      if (action.actionType === "Forced Deal" && victimHasProperties) {
         const rankedTargets = getRankedOpponentProperties(player.properties);
-        const botEligibleSets = bot.properties.filter(
-          (s) => !s.isComplete && s.cards.length > 0,
+        const botEligibleSets = botSets.filter(
+          (s) =>
+            s && !s.isComplete && Array.isArray(s.cards) && s.cards.length > 0,
         );
         if (rankedTargets.length > 0 && botEligibleSets.length > 0) {
           const bestTarget = rankedTargets[0];
@@ -421,12 +452,12 @@ export const evaluateBotTurnWithBrain = (
         action.rentColors
       ) {
         const validRentColors = action.rentColors.filter((col) => {
-          const set = bot.properties.find((s) => s.color === col);
-          return set && set.cards.length > 0;
+          const set = botSets.find((s) => s?.color === col);
+          return set && Array.isArray(set.cards) && set.cards.length > 0;
         });
         if (validRentColors.length > 0) {
           const targetColor = validRentColors[0];
-          const set = bot.properties.find((s) => s.color === targetColor);
+          const set = botSets.find((s) => s?.color === targetColor);
           const rentVal = set ? calculateRent(set) : 1;
           const weight = Math.round(rentVal * weights.RENT_MULTIPLIER);
           candidates.push({
@@ -475,9 +506,9 @@ export const evaluateBotTurnWithBrain = (
           type: "PLAY_CARD",
           payload: { playerId: botId, cardId: card.id, targetZone: "bank" },
         },
-        intentReason: `Banking ${card.name} as cash value (${card.value}M).`,
+        intentReason: `Banking ${card.name} as cash value (${card.value || 0}M).`,
         weight,
-        tacticalExplanation: `Depositing ${card.name} as ${card.value}M liquid cash. (Weight: +${weight})`,
+        tacticalExplanation: `Depositing ${card.name} as ${card.value || 0}M liquid cash. (Weight: +${weight})`,
       });
     }
   }

@@ -3,6 +3,7 @@ import { ReactionState, Card, PlayerState } from "../../types/game";
 import { Shield, XCircle } from "lucide-react";
 import { useGamifiedAudio } from "../audio/AudioContext";
 import { PaymentSelectionModal } from "../../components/ui/PaymentSelectionModal";
+import { getPlayerBankCards, getPlayerPropertyCards } from "./rules";
 
 interface ReactionModalProps {
   reaction: ReactionState;
@@ -24,7 +25,7 @@ export const ReactionModal: React.FC<ReactionModalProps> = ({
   humanPlayer,
 }) => {
   const { playSound } = useGamifiedAudio();
-  const [secondsLeft, setSecondsLeft] = useState(reaction.timerSeconds);
+  const [secondsLeft, setSecondsLeft] = useState(reaction?.timerSeconds || 5);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
 
   const playSoundRef = useRef(playSound);
@@ -39,13 +40,13 @@ export const ReactionModal: React.FC<ReactionModalProps> = ({
     onTimeoutRef.current = onTimeout;
   }, [onTimeout]);
 
-  const reactionKey = `${reaction.actionCard.id}-${reaction.counterChain.length}`;
+  const reactionKey = `${reaction?.actionCard?.id || "rx"}-${(reaction?.counterChain || []).length}`;
 
   useEffect(() => {
-    setSecondsLeft(reaction.timerSeconds);
+    setSecondsLeft(reaction?.timerSeconds || 5);
     setShowPaymentModal(false);
     playSoundRef.current("alertBuzz");
-  }, [reactionKey, reaction.timerSeconds]);
+  }, [reactionKey, reaction?.timerSeconds]);
 
   useEffect(() => {
     if (showPaymentModal) return;
@@ -66,7 +67,7 @@ export const ReactionModal: React.FC<ReactionModalProps> = ({
     "Multi-Rent",
     "Debt Collector",
     "Its My Birthday",
-  ].includes(reaction.actionCard.actionType);
+  ].includes(reaction?.actionCard?.actionType || "");
 
   useEffect(() => {
     if (showPaymentModal) return;
@@ -81,12 +82,12 @@ export const ReactionModal: React.FC<ReactionModalProps> = ({
       } else {
         onTimeoutRef.current();
       }
-    } else if (secondsLeft > 0 && secondsLeft < reaction.timerSeconds) {
+    } else if (secondsLeft > 0 && secondsLeft < (reaction?.timerSeconds || 5)) {
       playSoundRef.current("timerTick");
     }
   }, [
     secondsLeft,
-    reaction.timerSeconds,
+    reaction?.timerSeconds,
     isPaymentAction,
     humanPlayer,
     showPaymentModal,
@@ -112,14 +113,14 @@ export const ReactionModal: React.FC<ReactionModalProps> = ({
   }, [showPaymentModal]);
 
   if (showPaymentModal && humanPlayer) {
-    const bankCards = humanPlayer.bank;
-    const propertyCards = humanPlayer.properties.flatMap((s) => s.cards);
-    const amount = reaction.actionDetails.amount || 0;
+    const bankCards = getPlayerBankCards(humanPlayer);
+    const propertyCards = getPlayerPropertyCards(humanPlayer);
+    const amount = reaction?.actionDetails?.amount || 0;
 
     return (
       <PaymentSelectionModal
         amount={amount}
-        reason={`Action Card: ${reaction.actionCard.name}`}
+        reason={`Action Card: ${reaction?.actionCard?.name || "Action"}`}
         bankCards={bankCards}
         propertyCards={propertyCards}
         onConfirmPayment={(selectedCardIds) => {
@@ -152,7 +153,7 @@ export const ReactionModal: React.FC<ReactionModalProps> = ({
               fill="transparent"
               strokeDasharray="138.16"
               strokeDashoffset={
-                138.16 - (secondsLeft / reaction.timerSeconds) * 138.16
+                138.16 - (secondsLeft / (reaction?.timerSeconds || 5)) * 138.16
               }
               strokeLinecap="round"
               className="transition-all duration-1000 ease-linear"
@@ -172,15 +173,15 @@ export const ReactionModal: React.FC<ReactionModalProps> = ({
           <div className="p-3 bg-black/40 rounded-xl border border-white/5 text-[11px] text-gray-300 leading-normal mb-3">
             An incoming action card{" "}
             <span className="text-casino-gold font-bold">
-              "{reaction.actionCard.name}"
+              "{reaction?.actionCard?.name || "Action"}"
             </span>{" "}
             was played against you!
-            {reaction.actionDetails.amount && (
+            {reaction?.actionDetails?.amount && (
               <p className="mt-1 font-semibold text-white">
                 Value Owed: {reaction.actionDetails.amount}M Cash
               </p>
             )}
-            {reaction.actionDetails.targetColor && (
+            {reaction?.actionDetails?.targetColor && (
               <p className="mt-1 font-semibold text-white">
                 Target Color Set: {reaction.actionDetails.targetColor}
               </p>

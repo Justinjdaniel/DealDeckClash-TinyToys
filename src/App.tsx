@@ -12,6 +12,7 @@ import { StageWrapper } from "./components/layout/StageWrapper";
 import { MobileContainer } from "./components/layout/MobileContainer";
 import { FloatingPoints } from "./components/ui/FloatingPoints";
 import { AchievementPopup } from "./components/ui/AchievementPopup";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 const initialGameState: GameState = {
   gameId: "local-session",
@@ -113,38 +114,40 @@ function GameOrchestrator() {
   return (
     <StageWrapper>
       <MobileContainer screenShake={screenShake}>
-        {gameState.status === "LOBBY" ? (
-          <Menu onStartGame={handleStartGame} />
-        ) : (
-          <Board
-            state={gameState}
-            onDispatch={handleActionDispatch}
-            botStyle={botStyle}
-            gainXP={gainXP}
-            unlockAchievement={unlockAchievement}
-            incrementStreak={incrementStreak}
-            resetStreak={resetStreak}
-            triggerScreenShake={triggerScreenShake}
-          />
-        )}
-
-        {/* Reaction counting HUD overlay */}
-        {gameState.reactionQueue &&
-          gameState.reactionQueue.targetPlayerId === "human" && (
-            <ReactionModal
-              reaction={gameState.reactionQueue}
-              onReact={handleReactionRespond}
-              onTimeout={handleReactionTimeout}
-              jsnCard={humanJSNCard}
-              humanPlayer={humanPlayer}
+        <ErrorBoundary onReset={() => dispatch({ type: "RESET_GAME" })}>
+          {gameState.status === "LOBBY" ? (
+            <Menu onStartGame={handleStartGame} />
+          ) : (
+            <Board
+              state={gameState}
+              onDispatch={handleActionDispatch}
+              botStyle={botStyle}
+              gainXP={gainXP}
+              unlockAchievement={unlockAchievement}
+              incrementStreak={incrementStreak}
+              resetStreak={resetStreak}
+              triggerScreenShake={triggerScreenShake}
             />
           )}
 
-        {/* Floating flying text overlays */}
-        <FloatingPoints items={floatingPoints} />
+          {/* Reaction counting HUD overlay */}
+          {gameState.reactionQueue &&
+            gameState.reactionQueue.targetPlayerId === "human" && (
+              <ReactionModal
+                reaction={gameState.reactionQueue}
+                onReact={handleReactionRespond}
+                onTimeout={handleReactionTimeout}
+                jsnCard={humanJSNCard}
+                humanPlayer={humanPlayer}
+              />
+            )}
 
-        {/* Achievements unlocks chimes */}
-        <AchievementPopup achievement={recentAchievement} />
+          {/* Floating points overlays */}
+          <FloatingPoints items={floatingPoints} />
+
+          {/* Achievements unlocks chimes */}
+          <AchievementPopup achievement={recentAchievement} />
+        </ErrorBoundary>
       </MobileContainer>
     </StageWrapper>
   );

@@ -136,6 +136,14 @@ export type GameAction =
         selectedCardIds?: string[];
       };
     }
+  | {
+      type: "RESOLVE_PAYMENT";
+      payload: {
+        targetPlayerId: string;
+        callerPlayerId: string;
+        selectedCardIds?: string[];
+      };
+    }
   | { type: "REACTION_TIMED_OUT" }
   | {
       type: "DISCARD_OVERFLOW";
