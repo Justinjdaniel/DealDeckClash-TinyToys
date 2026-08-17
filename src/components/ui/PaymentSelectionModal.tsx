@@ -7,8 +7,8 @@ import { useGamifiedAudio } from "../../features/audio/AudioContext";
 interface PaymentSelectionModalProps {
   amount: number;
   reason: string;
-  bankCards: Card[];
-  propertyCards: (PropertyCard | WildcardCard)[];
+  bankCards?: Card[];
+  propertyCards?: (PropertyCard | WildcardCard)[];
   onConfirmPayment: (selectedCardIds: string[]) => void;
 }
 
@@ -22,51 +22,85 @@ const SelectableAssetCard: React.FC<SelectableAssetCardProps> = ({
   card,
   isSelected,
   onToggle,
-}) => (
-  <button
-    type="button"
-    onClick={() => onToggle(card.id)}
-    aria-pressed={isSelected}
-    aria-label={`${card.name}, value ${card.value}M`}
-    className={`relative rounded-xl p-0.5 border transition-all focus:outline-none focus:ring-2 focus:ring-casino-gold ${
-      isSelected
-        ? "ring-2 ring-casino-gold border-casino-gold bg-casino-gold/20 scale-105"
-        : "border-white/10 opacity-70 hover:opacity-100"
-    }`}
-  >
-    <div className="w-full h-16">
-      <PlayingCard card={card} />
-    </div>
-    {isSelected && (
-      <div className="absolute -top-1 -right-1 bg-casino-gold text-black rounded-full w-4 h-4 flex items-center justify-center text-[9px] font-black z-20">
-        ✓
+}) => {
+  if (!card) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => onToggle(card.id)}
+      aria-pressed={isSelected}
+      aria-label={`${card.name || "Card"}, value ${card.value || 0}M`}
+      className={`relative rounded-xl p-0.5 border transition-all focus:outline-none focus:ring-2 focus:ring-casino-gold ${
+        isSelected
+          ? "ring-2 ring-casino-gold border-casino-gold bg-casino-gold/20 scale-105"
+          : "border-white/10 opacity-70 hover:opacity-100"
+      }`}
+    >
+      <div className="w-full h-16">
+        <PlayingCard card={card} />
       </div>
-    )}
-  </button>
-);
+      {isSelected && (
+        <div className="absolute -top-1 -right-1 bg-casino-gold text-black rounded-full w-4 h-4 flex items-center justify-center text-[9px] font-black z-20">
+          ✓
+        </div>
+      )}
+    </button>
+  );
+};
 
 export const PaymentSelectionModal: React.FC<PaymentSelectionModalProps> = ({
   amount,
   reason,
-  bankCards,
-  propertyCards,
+  bankCards = [],
+  propertyCards = [],
   onConfirmPayment,
 }) => {
   const { playSound } = useGamifiedAudio();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const confirmBtnRef = useRef<HTMLButtonElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const allAssets: Card[] = [...bankCards, ...propertyCards];
-  const totalAvailableValue = allAssets.reduce((sum, c) => sum + c.value, 0);
+  const onConfirmPaymentRef = useRef(onConfirmPayment);
+  useEffect(() => {
+    onConfirmPaymentRef.current = onConfirmPayment;
+  }, [onConfirmPayment]);
+
+  const safeBankCards = (bankCards || []).filter(Boolean);
+  const safePropertyCards = (propertyCards || []).filter(Boolean);
+  const allAssets: Card[] = [...safeBankCards, ...safePropertyCards];
+
+  const totalBankValue = safeBankCards.reduce(
+    (sum, card) => sum + (card?.value || 0),
+    0,
+  );
+  const totalPropValue = safePropertyCards.reduce(
+    (sum, card) => sum + (card?.value || 0),
+    0,
+  );
+  const totalAssets = totalBankValue + totalPropValue;
 
   const selectedCards = allAssets.filter((c) => selectedIds.includes(c.id));
-  const selectedTotalValue = selectedCards.reduce((sum, c) => sum + c.value, 0);
+  const selectedTotalValue = selectedCards.reduce(
+    (sum, c) => sum + (c?.value || 0),
+    0,
+  );
 
   const isValid =
     allAssets.length === 0 ||
     selectedTotalValue >= amount ||
-    (totalAvailableValue < amount && selectedIds.length === allAssets.length);
+    (totalAssets < amount && selectedIds.length === allAssets.length);
+
+  // Auto-resolve zero assets / bankrupt edge case
+  useEffect(() => {
+    if (allAssets.length === 0 || totalAssets === 0) {
+      setToastMessage("Player has no assets to pay!");
+      const timer = setTimeout(() => {
+        onConfirmPaymentRef.current([]);
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [allAssets.length, totalAssets]);
 
   useEffect(() => {
     if (confirmBtnRef.current) {
@@ -108,6 +142,25 @@ export const PaymentSelectionModal: React.FC<PaymentSelectionModalProps> = ({
     playSound("bankCoin");
     onConfirmPayment(selectedIds);
   };
+
+  if (toastMessage) {
+    return (
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Payment Auto Resolution"
+        className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4"
+      >
+        <div className="max-w-sm w-full glass-panel rounded-2xl p-6 border-2 border-casino-gold text-center animate-[scaleIn_0.2s_ease-out]">
+          <AlertCircle className="w-8 h-8 text-amber-400 mx-auto mb-2 animate-bounce" />
+          <h3 className="text-base font-serif font-black text-white mb-1">
+            Zero Assets
+          </h3>
+          <p className="text-xs text-amber-300 font-bold">{toastMessage}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -153,7 +206,7 @@ export const PaymentSelectionModal: React.FC<PaymentSelectionModalProps> = ({
               <span className="text-[10px] text-green-400 font-bold flex items-center gap-1">
                 <Check className="w-3 h-3" /> Debt Covered
               </span>
-            ) : totalAvailableValue < amount ? (
+            ) : totalAssets < amount ? (
               <span className="text-[9px] text-red-400 font-bold flex items-center gap-1">
                 <AlertCircle className="w-3 h-3" /> Short Funds (Select All)
               </span>
@@ -170,11 +223,11 @@ export const PaymentSelectionModal: React.FC<PaymentSelectionModalProps> = ({
           {/* Bank Assets Section */}
           <div>
             <span className="text-[10px] font-mono font-bold text-casino-gold uppercase tracking-wider block mb-1">
-              Banked Assets ({bankCards.length})
+              Banked Assets ({safeBankCards.length})
             </span>
-            {bankCards.length > 0 ? (
+            {safeBankCards.length > 0 ? (
               <div className="grid grid-cols-4 gap-2">
-                {bankCards.map((card) => (
+                {safeBankCards.map((card) => (
                   <SelectableAssetCard
                     key={card.id}
                     card={card}
@@ -194,11 +247,11 @@ export const PaymentSelectionModal: React.FC<PaymentSelectionModalProps> = ({
           <div>
             <span className="text-[10px] font-mono font-bold text-casino-gold uppercase tracking-wider block mb-1 flex items-center gap-1">
               <Building2 className="w-3 h-3" /> Played Properties (
-              {propertyCards.length})
+              {safePropertyCards.length})
             </span>
-            {propertyCards.length > 0 ? (
+            {safePropertyCards.length > 0 ? (
               <div className="grid grid-cols-4 gap-2">
-                {propertyCards.map((card) => (
+                {safePropertyCards.map((card) => (
                   <SelectableAssetCard
                     key={card.id}
                     card={card}

@@ -7,10 +7,14 @@ import {
   ActionCard,
   PropertyCard,
   GameAction,
+  PropertySet,
 } from "../types/game";
 import { BotStyle, evaluateBotTurn } from "../services/bot";
 import { COLOR_HEX } from "../services/deck";
-import { findJSNInHand } from "../services/rules";
+import {
+  findJSNInHand,
+  getPlayerBankCards,
+} from "../features/game-engine/rules";
 import {
   Coins,
   AlertTriangle,
@@ -42,7 +46,6 @@ export const Board: React.FC<BoardProps> = ({
   const [selectedHandCard, setSelectedHandCard] = useState<Card | null>(null);
   const [botCommentary, setBotCommentary] = useState<string>("");
 
-  // Stable references for state, dispatch, and sound callbacks to avoid trigger loops
   const latestStateRef = useRef(state);
   const onDispatchRef = useRef(onDispatch);
   const playSoundRef = useRef(playSound);
@@ -53,6 +56,7 @@ export const Board: React.FC<BoardProps> = ({
     onDispatchRef.current = onDispatch;
     playSoundRef.current = playSound;
   }, [state, onDispatch, playSound]);
+
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [targetSelectOpen, setTargetSelectOpen] = useState(false);
   const [targetOptions, setTargetOptions] = useState<{
@@ -69,9 +73,10 @@ export const Board: React.FC<BoardProps> = ({
   );
   const [wildcardSelectorOpen, setWildcardSelectorOpen] = useState(false);
 
-  const bot = state.players.find((p) => p.isBot);
-  const human = state.players.find((p) => !p.isBot);
-  const isHumanTurn = state.players[state.currentPlayerIndex].id === human?.id;
+  const bot = (state.players || []).find((p) => p?.isBot);
+  const human = (state.players || []).find((p) => !p?.isBot);
+  const activePlayer = state.players?.[state.currentPlayerIndex];
+  const isHumanTurn = activePlayer ? activePlayer.id === human?.id : false;
 
   const logsEndRef = useRef<HTMLDivElement>(null);
 
@@ -81,7 +86,6 @@ export const Board: React.FC<BoardProps> = ({
     }
   }, [state.logs]);
 
-  // Trigger celebration on Winner State (gated with ref so it runs once per match)
   useEffect(() => {
     if (state.status === "WINNER") {
       if (!victoryTriggeredRef.current) {
@@ -98,10 +102,9 @@ export const Board: React.FC<BoardProps> = ({
     }
   }, [state.status, state.winnerId, human?.id]);
 
-  // Bot play tick: cancellable, runs on PLAYING/DISCARDING, forwards overflow
   const isBotActive = !isHumanTurn && bot;
   const botTurnKey = isBotActive
-    ? `${state.status}-${state.currentPlayerIndex}-${state.actionPointsLeft}-${state.reactionQueue ? "rx" : "norx"}-${state.players[state.currentPlayerIndex].hand.length}`
+    ? `${state.status}-${state.currentPlayerIndex}-${state.actionPointsLeft}-${state.reactionQueue ? "rx" : "norx"}-${(state.players?.[state.currentPlayerIndex]?.hand || []).length}`
     : "idle";
 
   useEffect(() => {
@@ -157,7 +160,6 @@ export const Board: React.FC<BoardProps> = ({
     state.status,
   ]);
 
-  // Reaction resolution when Bot targets player: cancellable with exactly 50% chance
   useEffect(() => {
     const rx = state.reactionQueue;
     if (!rx || rx.targetPlayerId !== bot?.id) return;
@@ -167,7 +169,10 @@ export const Board: React.FC<BoardProps> = ({
     const timer = setTimeout(() => {
       if (!active) return;
 
-      const jsn = findJSNInHand(bot);
+      const currentBot = (latestStateRef.current.players || []).find(
+        (p) => p?.id === bot?.id,
+      );
+      const jsn = findJSNInHand(currentBot);
       if (jsn && Math.random() < 0.5) {
         playSoundRef.current("jsnPlay");
         onDispatchRef.current({
@@ -189,6 +194,25 @@ export const Board: React.FC<BoardProps> = ({
   }, [state.reactionQueue, bot]);
 
   if (!human || !bot) return null;
+
+  const botBankCards = getPlayerBankCards(bot);
+  const botBankTotal = botBankCards.reduce(
+    (acc, c) => acc + (c?.value || 0),
+    0,
+  );
+  const botSets: PropertySet[] = Array.isArray(bot.properties)
+    ? bot.properties
+    : Object.values(bot.properties || {});
+
+  const humanBankCards = getPlayerBankCards(human);
+  const humanBankTotal = humanBankCards.reduce(
+    (acc, c) => acc + (c?.value || 0),
+    0,
+  );
+  const humanSets: PropertySet[] = Array.isArray(human.properties)
+    ? human.properties
+    : Object.values(human.properties || {});
+  const humanHand = (human.hand || []).filter(Boolean);
 
   const handleHandCardClick = (card: Card) => {
     if (!isHumanTurn || state.status !== "PLAYING") return;
@@ -227,7 +251,6 @@ export const Board: React.FC<BoardProps> = ({
       setSelectedHandCard(null);
       setActionMenuOpen(false);
     } else if (selectedHandCard.type === "Wildcard") {
-      // Open color selector
       setActiveWildcard(selectedHandCard as WildcardCard);
       setWildcardSelectorOpen(true);
       setActionMenuOpen(false);
@@ -238,10 +261,9 @@ export const Board: React.FC<BoardProps> = ({
     if (!selectedHandCard || selectedHandCard.type !== "Action") return;
     const actionCard = selectedHandCard as ActionCard;
 
-    // Handle rent targeting colors
     if (actionCard.actionType === "Rent" && actionCard.rentColors) {
-      const playerColors = human.properties
-        .filter((s) => s.cards.length > 0)
+      const playerColors = humanSets
+        .filter((s) => Array.isArray(s?.cards) && s.cards.length > 0)
         .map((s) => s.color);
       const choices = actionCard.rentColors.filter((c) =>
         playerColors.includes(c),
@@ -259,8 +281,8 @@ export const Board: React.FC<BoardProps> = ({
     }
 
     if (actionCard.actionType === "Multi-Rent") {
-      const playerColors = human.properties
-        .filter((s) => s.cards.length > 0)
+      const playerColors = humanSets
+        .filter((s) => Array.isArray(s?.cards) && s.cards.length > 0)
         .map((s) => s.color);
       if (playerColors.length > 0) {
         setTargetOptions({
@@ -276,10 +298,12 @@ export const Board: React.FC<BoardProps> = ({
       }
     }
 
-    // Handle Sly Deal targeting
     if (actionCard.actionType === "Sly Deal") {
-      const targetProps = bot.properties
-        .filter((s) => !s.isComplete && s.cards.length > 0)
+      const targetProps = botSets
+        .filter(
+          (s) =>
+            s && !s.isComplete && Array.isArray(s.cards) && s.cards.length > 0,
+        )
         .flatMap((s) => s.cards);
       if (targetProps.length > 0) {
         setTargetOptions({
@@ -295,17 +319,21 @@ export const Board: React.FC<BoardProps> = ({
       }
     }
 
-    // Handle Forced Deal targeting
     if (actionCard.actionType === "Forced Deal") {
-      const botProps = bot.properties
-        .filter((s) => !s.isComplete && s.cards.length > 0)
+      const botProps = botSets
+        .filter(
+          (s) =>
+            s && !s.isComplete && Array.isArray(s.cards) && s.cards.length > 0,
+        )
         .flatMap((s) => s.cards);
-      const myProps = human.properties
-        .filter((s) => !s.isComplete && s.cards.length > 0)
+      const myProps = humanSets
+        .filter(
+          (s) =>
+            s && !s.isComplete && Array.isArray(s.cards) && s.cards.length > 0,
+        )
         .flatMap((s) => s.cards);
 
       if (botProps.length > 0 && myProps.length > 0) {
-        // Step 1: select opponent card to steal
         setTargetOptions({
           type: "FORCED_DEAL_STEP_1",
           options: botProps.map((c) => ({
@@ -319,9 +347,8 @@ export const Board: React.FC<BoardProps> = ({
       }
     }
 
-    // Handle Deal Breaker targeting
     if (actionCard.actionType === "Deal Breaker") {
-      const completeSets = bot.properties.filter((s) => s.isComplete);
+      const completeSets = botSets.filter((s) => s?.isComplete);
       if (completeSets.length > 0) {
         setTargetOptions({
           type: "DEAL_BREAKER_TARGET",
@@ -336,7 +363,6 @@ export const Board: React.FC<BoardProps> = ({
       }
     }
 
-    // Standard non-targeted actions (Pass Go, Its My Birthday, Debt Collector)
     playSound("cardPlay");
     onDispatch({
       type: "PLAY_CARD",
@@ -376,9 +402,11 @@ export const Board: React.FC<BoardProps> = ({
         },
       });
     } else if (targetOptions.type === "FORCED_DEAL_STEP_1") {
-      // Open step 2 for Forced Deal
-      const myProps = human.properties
-        .filter((s) => !s.isComplete && s.cards.length > 0)
+      const myProps = humanSets
+        .filter(
+          (s) =>
+            s && !s.isComplete && Array.isArray(s.cards) && s.cards.length > 0,
+        )
         .flatMap((s) => s.cards);
       setTargetOptions({
         type: "FORCED_DEAL_STEP_2",
@@ -468,7 +496,6 @@ export const Board: React.FC<BoardProps> = ({
           )}
         </div>
 
-        {/* Action point counter */}
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-2">
             <Coins className="text-casino-gold w-5 h-5" />
@@ -502,11 +529,10 @@ export const Board: React.FC<BoardProps> = ({
         </div>
       </div>
 
-      {/* Main Board Arena (Opponent, Center, Player) */}
+      {/* Main Board Arena */}
       <div className="flex-1 flex flex-col lg:flex-row p-4 gap-4 overflow-hidden relative z-10">
-        {/* Playfield Area */}
         <div className="flex-1 flex flex-col justify-between gap-4 max-h-[85vh] overflow-y-auto pr-1">
-          {/* BOT AREA (TOP) */}
+          {/* BOT AREA */}
           <div className="glass-panel rounded-2xl p-4 border border-white/5 relative">
             <div className="absolute top-2 right-4 flex items-center gap-1 text-casino-gold/80 text-[11px] font-bold">
               <MessageCircle className="w-3.5 h-3.5" />
@@ -519,7 +545,7 @@ export const Board: React.FC<BoardProps> = ({
                   AI
                 </div>
                 <div className="absolute -bottom-1 -right-1 bg-green-500 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-full text-white">
-                  {bot.hand.length} Cards
+                  {(bot.hand || []).length} Cards
                 </div>
               </div>
 
@@ -529,16 +555,16 @@ export const Board: React.FC<BoardProps> = ({
                 </h3>
                 <div className="flex items-center gap-2 mt-1">
                   <span className="text-[11px] font-mono text-gray-300">
-                    Bank Vault: {bot.bank.reduce((acc, c) => acc + c.value, 0)}M
+                    Bank Vault: {botBankTotal}M
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* AI Property Sets */}
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-              {bot.properties.map((set) => {
-                if (set.cards.length === 0) return null;
+              {botSets.map((set) => {
+                if (!set || !Array.isArray(set.cards) || set.cards.length === 0)
+                  return null;
                 return (
                   <div
                     key={set.color}
@@ -565,9 +591,8 @@ export const Board: React.FC<BoardProps> = ({
             </div>
           </div>
 
-          {/* PLAY AREA (CENTER) */}
+          {/* PLAY AREA */}
           <div className="grid grid-cols-3 gap-4 items-center justify-center py-4">
-            {/* Draw Deck Stack */}
             <div className="flex flex-col items-center">
               <div className="relative w-24 h-36 rounded-xl bg-gradient-to-br from-casino-goldDark to-casino-goldLight p-1 shadow-gold-glow cursor-not-allowed">
                 <div className="w-full h-full rounded-lg bg-casino-felt border border-casino-gold/40 flex flex-col items-center justify-center p-2 text-center">
@@ -576,23 +601,22 @@ export const Board: React.FC<BoardProps> = ({
                     DRAW DECK
                   </span>
                   <span className="font-mono text-[10px] text-casino-gold font-bold mt-1">
-                    {state.deck.length} Left
+                    {(state.deck || []).length} Left
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* Action Discard Center Pile */}
             <div className="flex flex-col items-center">
               <div className="relative w-24 h-36 rounded-xl border-2 border-dashed border-casino-gold/30 flex flex-col items-center justify-center text-center p-2">
-                {state.discardPile.length > 0 ? (
+                {(state.discardPile || []).length > 0 ? (
                   <div className="w-full h-full rounded-lg bg-black/40 border border-white/10 p-2 flex flex-col justify-between relative overflow-hidden">
                     <div className="w-full h-1.5 rounded-full bg-red-500 mb-1" />
                     <span className="text-[10px] text-red-400 font-bold uppercase tracking-wider block">
                       Played
                     </span>
                     <span className="font-bold text-[11px] text-white leading-tight block my-auto">
-                      {state.discardPile[0].name}
+                      {state.discardPile[0]?.name || "Card"}
                     </span>
                     <span className="text-[8px] text-casino-gold/80 block mt-1 font-mono">
                       {state.discardPile.length} Discards
@@ -609,7 +633,6 @@ export const Board: React.FC<BoardProps> = ({
               </div>
             </div>
 
-            {/* Dynamic AI speech intent logs */}
             <div className="flex flex-col items-center">
               <div className="w-full max-w-[200px] glass-panel-light rounded-xl p-3 border border-white/5 relative h-36 flex flex-col justify-between">
                 <div className="flex items-center gap-1.5 text-casino-gold text-[10px] font-bold uppercase tracking-widest border-b border-white/5 pb-1 mb-1">
@@ -618,7 +641,7 @@ export const Board: React.FC<BoardProps> = ({
                 </div>
                 <div className="flex-1 overflow-y-auto text-xs text-gray-300 italic py-1 leading-relaxed scrollbar-none font-medium">
                   {botCommentary ||
-                    (state.logs.length > 0
+                    ((state.logs || []).length > 0
                       ? state.logs[0]
                       : "Welcome to Deal Deck Clash. Place your bets and roll your cards.")}
                 </div>
@@ -626,53 +649,53 @@ export const Board: React.FC<BoardProps> = ({
             </div>
           </div>
 
-          {/* PLAYER AREA (BOTTOM) */}
+          {/* PLAYER AREA */}
           <div className="glass-panel rounded-2xl p-4 border border-white/5 relative">
             <h3 className="font-serif font-bold text-white text-sm mb-3 border-b border-white/5 pb-2 flex items-center justify-between">
               <span>Your Boardroom Assets</span>
               <span className="font-mono text-xs text-casino-gold">
-                Bank Vault: {human.bank.reduce((acc, c) => acc + c.value, 0)}M
-                Cash
+                Bank Vault: {humanBankTotal}M Cash
               </span>
             </h3>
 
-            {/* Cash & Assets Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Cash Vault */}
               <div className="p-3 bg-black/25 rounded-xl border border-white/5">
                 <span className="text-[10px] uppercase font-bold text-casino-gold tracking-widest block mb-2">
                   Liquid Cash Vault
                 </span>
-                {human.bank.length > 0 ? (
+                {humanBankCards.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
-                    {human.bank.map((card) => (
+                    {humanBankCards.map((card) => (
                       <div
                         key={card.id}
                         className="px-3 py-1.5 rounded-lg bg-green-950/40 border border-green-500/30 flex items-center gap-1.5"
                       >
                         <Coins className="w-3.5 h-3.5 text-green-400" />
                         <span className="text-xs font-mono font-bold text-white">
-                          {card.value}M
+                          {card.value || 0}M
                         </span>
                       </div>
                     ))}
                   </div>
                 ) : (
                   <span className="text-xs text-gray-500 block italic py-2">
-                    No banked money card in vault. Complete rent triggers will
-                    auto-liquidate property card assets to clear debts!
+                    No banked money card in vault.
                   </span>
                 )}
               </div>
 
-              {/* Player Property sets */}
               <div className="p-3 bg-black/25 rounded-xl border border-white/5">
                 <span className="text-[10px] uppercase font-bold text-casino-gold tracking-widest block mb-2">
                   Your Property Sets
                 </span>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                  {human.properties.map((set) => {
-                    if (set.cards.length === 0) return null;
+                  {humanSets.map((set) => {
+                    if (
+                      !set ||
+                      !Array.isArray(set.cards) ||
+                      set.cards.length === 0
+                    )
+                      return null;
                     return (
                       <div
                         key={set.color}
@@ -694,18 +717,17 @@ export const Board: React.FC<BoardProps> = ({
                           </span>
                         )}
 
-                        {/* Interactive wildcards assigning color */}
-                        {set.cards.some((c) => c.type === "Wildcard") && (
+                        {set.cards.some((c) => c?.type === "Wildcard") && (
                           <div className="mt-1.5 flex gap-1">
                             {set.cards
-                              .filter((c) => c.type === "Wildcard")
+                              .filter((c) => c?.type === "Wildcard")
                               .map((card) => {
                                 const wild = card as WildcardCard;
                                 return (
                                   <button
                                     key={wild.id}
                                     onClick={() => {
-                                      const nextCol = wild.colors.find(
+                                      const nextCol = (wild.colors || []).find(
                                         (c) => c !== set.color && c !== "Any",
                                       );
                                       if (nextCol) {
@@ -741,7 +763,7 @@ export const Board: React.FC<BoardProps> = ({
             </div>
 
             <div className="h-[280px] lg:h-[450px] overflow-y-auto space-y-2.5 pr-1 font-mono text-[11px] leading-relaxed">
-              {state.logs.map((log, idx) => {
+              {(state.logs || []).map((log, idx) => {
                 let colorClass = "text-gray-300";
                 if (log.includes("🏆") || log.includes("WINNER"))
                   colorClass = "text-casino-gold font-bold";
@@ -792,7 +814,7 @@ export const Board: React.FC<BoardProps> = ({
         </div>
 
         <div className="flex flex-wrap justify-center items-center gap-3 md:gap-4 max-w-5xl">
-          {human.hand.map((card) => {
+          {humanHand.map((card) => {
             const isSelected = selectedHandCard?.id === card.id;
             return (
               <motion.div
@@ -806,7 +828,6 @@ export const Board: React.FC<BoardProps> = ({
                 }`}
               >
                 <div className="w-full h-full rounded-lg bg-casino-felt border border-white/5 p-1 flex flex-col justify-between relative">
-                  {/* Color strip top */}
                   {card.type === "Property" && (
                     <div
                       className="w-full h-2 rounded"
@@ -837,7 +858,7 @@ export const Board: React.FC<BoardProps> = ({
 
                   <div className="flex items-center justify-between border-t border-white/5 pt-1 mt-1 font-mono font-bold text-[9px] text-casino-gold">
                     <span>{card.type}</span>
-                    <span>{card.value}M</span>
+                    <span>{card.value || 0}M</span>
                   </div>
                 </div>
               </motion.div>
@@ -853,13 +874,13 @@ export const Board: React.FC<BoardProps> = ({
             <div className="text-center mb-4 flex items-center gap-2">
               <AlertTriangle className="text-red-400 animate-bounce" />
               <span className="text-sm font-bold text-red-200">
-                HAND SIZE EXCEEDED: You have {human.hand.length} cards and must
+                HAND SIZE EXCEEDED: You have {humanHand.length} cards and must
                 select cards to discard down to 7 limit!
               </span>
             </div>
 
             <div className="flex flex-wrap justify-center gap-2 mb-4">
-              {human.hand.map((card) => (
+              {humanHand.map((card) => (
                 <button
                   key={card.id}
                   onClick={() => {
@@ -880,7 +901,6 @@ export const Board: React.FC<BoardProps> = ({
 
       {/* Dynamic Interaction Modals */}
       <AnimatePresence>
-        {/* Action Picker popover */}
         {actionMenuOpen && selectedHandCard && (
           <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="max-w-sm w-full glass-panel rounded-2xl p-6 border border-casino-gold/40 shadow-gold-glow animate-[scaleIn_0.15s_ease-out]">
@@ -947,7 +967,6 @@ export const Board: React.FC<BoardProps> = ({
           </div>
         )}
 
-        {/* Dynamic target selection modal */}
         {targetSelectOpen && targetOptions && (
           <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="max-w-sm w-full glass-panel rounded-2xl p-6 border border-casino-gold/40 shadow-gold-glow animate-[scaleIn_0.15s_ease-out]">
@@ -998,7 +1017,6 @@ export const Board: React.FC<BoardProps> = ({
           </div>
         )}
 
-        {/* Wildcard color chooser modal */}
         {wildcardSelectorOpen && activeWildcard && (
           <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="max-w-sm w-full glass-panel rounded-2xl p-6 border border-casino-gold/40 shadow-gold-glow animate-[scaleIn_0.15s_ease-out]">
@@ -1006,14 +1024,12 @@ export const Board: React.FC<BoardProps> = ({
                 WILDCARD TUNING
               </h3>
               <p className="text-xs text-gray-400 text-center mb-6 leading-relaxed">
-                Choose the color set you want to assign this wildcard to. You
-                can toggle/flip this anytime on your property board.
+                Choose the color set you want to assign this wildcard to.
               </p>
 
               <div className="grid grid-cols-2 gap-2 mb-6">
-                {activeWildcard.colors.includes("Any")
-                  ? // Any color wildcards
-                    [
+                {(activeWildcard.colors || []).includes("Any")
+                  ? [
                       "Brown",
                       "Light Blue",
                       "Pink",
@@ -1038,7 +1054,7 @@ export const Board: React.FC<BoardProps> = ({
                         {col}
                       </button>
                     ))
-                  : activeWildcard.colors.map((col) => (
+                  : (activeWildcard.colors || []).map((col) => (
                       <button
                         key={col}
                         onClick={() => handleWildcardColorSelect(col)}
