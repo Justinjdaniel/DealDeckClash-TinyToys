@@ -12,6 +12,7 @@ import { StageWrapper } from "./components/layout/StageWrapper";
 import { MobileContainer } from "./components/layout/MobileContainer";
 import { FloatingPoints } from "./components/ui/FloatingPoints";
 import { AchievementPopup } from "./components/ui/AchievementPopup";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 const initialGameState: GameState = {
   gameId: "local-session",
@@ -45,13 +46,30 @@ const initialGameState: GameState = {
   logs: [],
 };
 
-function GameOrchestrator() {
-  const [gameState, dispatch] = useReducer(dispatchAction, initialGameState);
-  const [botStyle, setBotStyle] = useState<BotStyle>("Aggressive");
-  const { playSound } = useGamifiedAudio();
+interface GameStageContentProps {
+  gameState: GameState;
+  botStyle: BotStyle;
+  onStartGame: (style: BotStyle, roomCode?: string) => void;
+  onActionDispatch: (action: GameAction) => boolean;
+  onReactionRespond: (
+    useJSN: boolean,
+    jsnCardId?: string,
+    selectedCardIds?: string[],
+  ) => void;
+  onReactionTimeout: () => void;
+  gamification: ReturnType<typeof useGamification>;
+}
 
+function GameStageContent({
+  gameState,
+  botStyle,
+  onStartGame,
+  onActionDispatch,
+  onReactionRespond,
+  onReactionTimeout,
+  gamification,
+}: GameStageContentProps) {
   const {
-    screenShake,
     floatingPoints,
     recentAchievement,
     gainXP,
@@ -59,7 +77,64 @@ function GameOrchestrator() {
     incrementStreak,
     resetStreak,
     triggerScreenShake,
-  } = useGamification(playSound);
+  } = gamification;
+
+  const players = Array.isArray(gameState?.players) ? gameState.players : [];
+  const humanPlayer = players.find((p) => p?.id === "human");
+  const humanHand = Array.isArray(humanPlayer?.hand) ? humanPlayer.hand : [];
+  const humanJSNCard: Card | null =
+    humanHand.find(
+      (c) =>
+        c &&
+        c.type === "Action" &&
+        (c as ActionCard).actionType === "Just Say No",
+    ) || null;
+
+  return (
+    <>
+      {gameState.status === "LOBBY" ? (
+        <Menu onStartGame={onStartGame} />
+      ) : (
+        <Board
+          state={gameState}
+          onDispatch={onActionDispatch}
+          botStyle={botStyle}
+          gainXP={gainXP}
+          unlockAchievement={unlockAchievement}
+          incrementStreak={incrementStreak}
+          resetStreak={resetStreak}
+          triggerScreenShake={triggerScreenShake}
+        />
+      )}
+
+      {/* Reaction counting HUD overlay */}
+      {gameState.reactionQueue &&
+        gameState.reactionQueue.targetPlayerId === "human" && (
+          <ReactionModal
+            reaction={gameState.reactionQueue}
+            onReact={onReactionRespond}
+            onTimeout={onReactionTimeout}
+            jsnCard={humanJSNCard}
+            humanPlayer={humanPlayer}
+          />
+        )}
+
+      {/* Floating flying text overlays */}
+      <FloatingPoints items={floatingPoints} />
+
+      {/* Achievements unlocks chimes */}
+      <AchievementPopup achievement={recentAchievement} />
+    </>
+  );
+}
+
+function GameOrchestrator() {
+  const [gameState, dispatch] = useReducer(dispatchAction, initialGameState);
+  const [botStyle, setBotStyle] = useState<BotStyle>("Aggressive");
+  const { playSound } = useGamifiedAudio();
+
+  const gamification = useGamification(playSound);
+  const { unlockAchievement } = gamification;
 
   const handleStartGame = (style: BotStyle, roomCode?: string) => {
     setBotStyle(style);
@@ -102,49 +177,20 @@ function GameOrchestrator() {
     handleActionDispatch({ type: "REACTION_TIMED_OUT" });
   }, [handleActionDispatch]);
 
-  const humanPlayer = gameState.players.find((p) => p.id === "human");
-  const humanJSNCard: Card | null = humanPlayer
-    ? humanPlayer.hand.find(
-        (c) =>
-          c.type === "Action" && (c as ActionCard).actionType === "Just Say No",
-      ) || null
-    : null;
-
   return (
     <StageWrapper>
-      <MobileContainer screenShake={screenShake}>
-        {gameState.status === "LOBBY" ? (
-          <Menu onStartGame={handleStartGame} />
-        ) : (
-          <Board
-            state={gameState}
-            onDispatch={handleActionDispatch}
+      <MobileContainer screenShake={gamification.screenShake}>
+        <ErrorBoundary onReset={() => dispatch({ type: "RESET_GAME" })}>
+          <GameStageContent
+            gameState={gameState}
             botStyle={botStyle}
-            gainXP={gainXP}
-            unlockAchievement={unlockAchievement}
-            incrementStreak={incrementStreak}
-            resetStreak={resetStreak}
-            triggerScreenShake={triggerScreenShake}
+            onStartGame={handleStartGame}
+            onActionDispatch={handleActionDispatch}
+            onReactionRespond={handleReactionRespond}
+            onReactionTimeout={handleReactionTimeout}
+            gamification={gamification}
           />
-        )}
-
-        {/* Reaction counting HUD overlay */}
-        {gameState.reactionQueue &&
-          gameState.reactionQueue.targetPlayerId === "human" && (
-            <ReactionModal
-              reaction={gameState.reactionQueue}
-              onReact={handleReactionRespond}
-              onTimeout={handleReactionTimeout}
-              jsnCard={humanJSNCard}
-              humanPlayer={humanPlayer}
-            />
-          )}
-
-        {/* Floating flying text overlays */}
-        <FloatingPoints items={floatingPoints} />
-
-        {/* Achievements unlocks chimes */}
-        <AchievementPopup achievement={recentAchievement} />
+        </ErrorBoundary>
       </MobileContainer>
     </StageWrapper>
   );

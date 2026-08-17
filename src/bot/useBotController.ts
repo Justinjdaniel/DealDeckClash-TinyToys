@@ -1,12 +1,15 @@
 import { useState, useEffect, useRef } from "react";
-import { GameState, GameAction } from "../types/game";
+import { GameState, GameAction, ActionCard } from "../types/game";
 import {
   BotStyle,
   BotDecision,
   evaluateBotTurnWithBrain,
   TRAINED_BOT_MODELS,
 } from "./botBrain";
-import { findJSNInHand } from "../features/game-engine/rules";
+import {
+  findJSNInHand,
+  getPlayerPropertyCards,
+} from "../features/game-engine/rules";
 
 interface UseBotControllerProps {
   state: GameState;
@@ -52,14 +55,14 @@ export const useBotController = ({
   playSoundRef.current = playSound;
   randomRef.current = randomSource;
 
-  const bot = state.players.find((p) => p.isBot);
-  const activePlayer = state.players[state.currentPlayerIndex];
-  const isBotTurn = activePlayer?.id === bot?.id;
+  const bot = (state.players || []).find((p) => p?.isBot);
+  const activePlayer = state.players?.[state.currentPlayerIndex];
+  const isBotTurn = activePlayer ? activePlayer.id === bot?.id : false;
   const hasReactionQueue = !!state.reactionQueue;
   const actionPointsLeft = state.actionPointsLeft;
   const status = state.status;
   const botId = bot?.id;
-  const handLength = bot?.hand.length || 0;
+  const handLength = bot?.hand?.length || 0;
   const pendingDiscardPlayerId = state.pendingDiscardPlayerId;
 
   // Bot Turn Evaluation Loop
@@ -79,7 +82,49 @@ export const useBotController = ({
       setIsBotThinking(false);
 
       const currentState = stateRef.current;
-      const decision = evaluateBotTurnWithBrain(currentState, botId, botStyle);
+      const currentBot = (currentState.players || []).find(
+        (p) => p?.id === botId,
+      );
+      const victim = (currentState.players || []).find((p) => p?.id !== botId);
+
+      if (!currentBot) return;
+
+      let decision = evaluateBotTurnWithBrain(currentState, botId, botStyle);
+
+      // Effect Lock Preventer: Validate targeted property card actions
+      const victimProps = getPlayerPropertyCards(victim);
+      const victimHasProperties = victimProps.length > 0;
+
+      if (decision.action.type === "PLAY_CARD") {
+        const { cardId, targetZone } = decision.action.payload;
+        if (targetZone === "center") {
+          const playedCard = (currentBot.hand || []).find(
+            (c) => c?.id === cardId,
+          );
+          if (playedCard && playedCard.type === "Action") {
+            const actionType = (playedCard as ActionCard).actionType;
+            if (
+              (actionType === "Sly Deal" || actionType === "Forced Deal") &&
+              !victimHasProperties
+            ) {
+              // Fallback to banking cash or passing turn
+              decision = {
+                action: {
+                  type: "PLAY_CARD",
+                  payload: {
+                    playerId: botId,
+                    cardId: playedCard.id,
+                    targetZone: "bank",
+                  },
+                },
+                intentReason: `Banking ${playedCard.name} because victim has no targetable properties.`,
+                weight: 50,
+                tacticalExplanation: `Redirecting ${playedCard.name} to bank vault.`,
+              };
+            }
+          }
+        }
+      }
 
       setBotDecision(decision);
       setBotCommentary(decision.intentReason);
@@ -126,7 +171,9 @@ export const useBotController = ({
     const timer = setTimeout(() => {
       if (!active) return;
 
-      const currentBot = stateRef.current.players.find((p) => p.id === botId);
+      const currentBot = (stateRef.current.players || []).find(
+        (p) => p?.id === botId,
+      );
       if (!currentBot) return;
 
       const jsn = findJSNInHand(currentBot);
