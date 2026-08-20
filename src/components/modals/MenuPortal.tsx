@@ -23,7 +23,7 @@ export const MenuPortal: React.FC<MenuPortalProps> = ({
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-amber-400 to-amber-600 flex items-center justify-center text-slate-950 shadow-lg shadow-amber-500/20">
             <Sparkles className="w-10 h-10 animate-pulse" />
           </div>
-          <h1 className="text-2xl font-black tracking-tight bg-gradient-to-r from-amber-200 via-amber-400 to-amber-200 bg-clip-text text-transparent">
+          <h1 className="text-lg font-black tracking-tight bg-gradient-to-r from-amber-200 via-amber-400 to-amber-200 bg-clip-text text-transparent">
             DEAL DECK CLASH
           </h1>
           <p className="text-xs text-slate-400 font-medium">

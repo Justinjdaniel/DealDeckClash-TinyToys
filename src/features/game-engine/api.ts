@@ -64,6 +64,31 @@ function findSmallestCombination(cards: Card[], target: number): Card[] {
   return bestSubset;
 }
 
+// Helper to automatically check and advance turn or trigger discard overflow when action points reach 0
+const checkAutoEndTurn = (
+  nextState: GameState,
+  logMsg: (msg: string) => void,
+) => {
+  if (nextState.status !== "PLAYING") return;
+  if (nextState.actionPointsLeft > 0) return;
+  if (nextState.reactionQueue !== null) return;
+
+  const players = Array.isArray(nextState.players) ? nextState.players : [];
+  const activePlayer = players[nextState.currentPlayerIndex];
+  if (!activePlayer) return;
+
+  if (!activePlayer.hand) activePlayer.hand = [];
+  if (activePlayer.hand.length > 7) {
+    nextState.status = "DISCARDING";
+    nextState.pendingDiscardPlayerId = activePlayer.id;
+    logMsg(
+      `⚠️ ${activePlayer.name} has ${activePlayer.hand.length} cards in hand and must discard down to 7.`,
+    );
+  } else {
+    advanceTurn(nextState, logMsg);
+  }
+};
+
 // Helper to advance the turn and deal cards
 const advanceTurn = (nextState: GameState, logMsg: (msg: string) => void) => {
   if (!Array.isArray(nextState.players) || nextState.players.length === 0)
@@ -872,6 +897,7 @@ export const dispatchAction = (
           `🏆 WINNER! ${player.name} has completed 3 full sets and won the match!`,
         );
       }
+      checkAutoEndTurn(nextState, logMsg);
       break;
     }
 
@@ -929,6 +955,7 @@ export const dispatchAction = (
         resolveReaction(nextState, nextState.reactionQueue, validSelectedIds);
         nextState.reactionQueue = null;
         accepted = true;
+        checkAutoEndTurn(nextState, logMsg);
       } else {
         accepted = false;
       }
@@ -989,6 +1016,7 @@ export const dispatchAction = (
         resolveReaction(nextState, rx, selectedCardIds || []);
         nextState.reactionQueue = null;
         accepted = true;
+        checkAutoEndTurn(nextState, logMsg);
       }
       break;
     }
@@ -1006,6 +1034,7 @@ export const dispatchAction = (
         resolveReaction(nextState, rx);
         nextState.reactionQueue = null;
         accepted = true;
+        checkAutoEndTurn(nextState, logMsg);
       }
       break;
     }

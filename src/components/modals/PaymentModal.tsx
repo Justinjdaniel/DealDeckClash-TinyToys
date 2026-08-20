@@ -40,7 +40,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-5 shadow-2xl flex flex-col gap-4 text-slate-100 max-h-[85vh] overflow-hidden">
         <div className="flex items-center gap-2 border-b border-slate-800 pb-3 text-rose-400 font-bold">
           <ShieldAlert className="w-5 h-5" />
-          <h3 className="text-lg">Payment Required: ${amountRequired}M</h3>
+          <h3 className="text-base">Payment Required: ${amountRequired}M</h3>
         </div>
 
         <p className="text-xs text-slate-300">

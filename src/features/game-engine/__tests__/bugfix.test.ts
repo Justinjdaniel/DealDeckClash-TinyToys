@@ -119,6 +119,35 @@ describe("Mid-Game Crash & Zero Asset Bugfixes", () => {
     }
   });
 
+  it("automatically ends turn when action points reach 0 and no reaction is pending", () => {
+    const state = createBaseState();
+    state.currentPlayerIndex = 0; // Human turn
+    state.actionPointsLeft = 1;
+    const humanPlayer = state.players[0];
+
+    const moneyCard = {
+      id: "m-1",
+      name: "1M Money",
+      type: "Money" as const,
+      value: 1,
+    };
+    humanPlayer.hand = [moneyCard];
+
+    const nextState = dispatchAction(state, {
+      type: "PLAY_CARD",
+      payload: {
+        playerId: humanPlayer.id,
+        cardId: moneyCard.id,
+        targetZone: "bank",
+      },
+    });
+
+    expect(nextState.accepted).toBe(true);
+    // Should have auto-ended turn and advanced currentPlayerIndex to 1
+    expect(nextState.currentPlayerIndex).toBe(1);
+    expect(nextState.actionPointsLeft).toBe(3);
+  });
+
   it("supports RESOLVE_PAYMENT action in reducer safely", () => {
     const state = createBaseState();
     const humanPlayer = state.players[0];

@@ -4,10 +4,13 @@ import {
   GameAction,
   Card,
   WildcardCard,
+  ActionCard,
   CardColor,
+  PropertySet,
 } from "../../types/game";
 import { VisualCard } from "../cards/VisualCard";
 import { WildcardColorModal } from "../modals/WildcardColorModal";
+import { RentColorModal } from "../modals/RentColorModal";
 import { SettingsModal } from "../modals/SettingsModal";
 import { PaymentModal } from "../modals/PaymentModal";
 import {
@@ -22,6 +25,42 @@ interface GameLayoutProps {
   onLeaveGame: () => void;
 }
 
+const PropertySetStack: React.FC<{
+  set: PropertySet;
+  onCardClick?: (card: WildcardCard) => void;
+}> = ({ set, onCardClick }) => {
+  if (!set.cards || set.cards.length === 0) return null;
+
+  return (
+    <div className="flex flex-col items-center m-0.5">
+      {set.isComplete && (
+        <span className="text-[8px] font-black text-amber-400 bg-amber-950/90 px-1 py-0.5 rounded border border-amber-400/50 mb-0.5 shadow">
+          ★ COMPLETE
+        </span>
+      )}
+      <div className="flex flex-col items-center">
+        {set.cards.map((card, idx) => (
+          <div
+            key={card.id}
+            className={idx > 0 ? "-mt-14" : ""}
+            style={{ zIndex: idx + 1 }}
+          >
+            <VisualCard
+              card={card}
+              size="sm"
+              onClick={
+                card.type === "Wildcard"
+                  ? () => onCardClick?.(card as WildcardCard)
+                  : undefined
+              }
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 export const GameLayout: React.FC<GameLayoutProps> = ({
   state,
   onDispatch,
@@ -30,6 +69,7 @@ export const GameLayout: React.FC<GameLayoutProps> = ({
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [wildcardModalCard, setWildcardModalCard] =
     useState<WildcardCard | null>(null);
+  const [rentModalCard, setRentModalCard] = useState<ActionCard | null>(null);
   const [selectedHandCardId, setSelectedHandCardId] = useState<string | null>(
     null,
   );
@@ -52,8 +92,13 @@ export const GameLayout: React.FC<GameLayoutProps> = ({
     0,
   );
 
-  const humanProperties = human ? getPlayerPropertyCards(human) : [];
-  const opponentProperties = opponent ? getPlayerPropertyCards(opponent) : [];
+  const humanSets: PropertySet[] = Array.isArray(human?.properties)
+    ? human.properties
+    : (Object.values(human?.properties || {}) as PropertySet[]);
+
+  const opponentSets: PropertySet[] = Array.isArray(opponent?.properties)
+    ? opponent.properties
+    : (Object.values(opponent?.properties || {}) as PropertySet[]);
 
   const handleCardClick = (card: Card) => {
     if (!isHumanTurn || state.actionPointsLeft <= 0) return;
@@ -71,6 +116,18 @@ export const GameLayout: React.FC<GameLayoutProps> = ({
     colorOption?: CardColor,
   ) => {
     if (!selectedHandCardId || !human) return;
+
+    if (
+      targetZone === "center" &&
+      selectedHandCard?.type === "Action" &&
+      ((selectedHandCard as ActionCard).actionType === "Rent" ||
+        (selectedHandCard as ActionCard).actionType === "Multi-Rent") &&
+      !colorOption
+    ) {
+      setRentModalCard(selectedHandCard as ActionCard);
+      return;
+    }
+
     onDispatch({
       type: "PLAY_CARD",
       payload: {
@@ -94,12 +151,12 @@ export const GameLayout: React.FC<GameLayoutProps> = ({
   };
 
   return (
-    <div className="w-full h-[100dvh] overflow-hidden flex flex-col justify-between p-2 select-none bg-gradient-to-b from-slate-950 via-emerald-950 to-slate-950 text-slate-100">
+    <div className="w-full h-[100dvh] overflow-hidden flex flex-col justify-between p-1.5 select-none bg-gradient-to-b from-slate-950 via-emerald-950 to-slate-950 text-slate-100">
       {/* TOP ZONE: Opponent Status Bar */}
-      <div className="w-full flex items-center justify-between bg-slate-900/80 border border-slate-800 rounded-xl p-2 shadow-lg backdrop-blur">
+      <div className="w-full flex items-center justify-between bg-slate-900/80 border border-slate-800 rounded-xl p-1.5 shadow-lg backdrop-blur">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
-            <Bot className="w-5 h-5" />
+          <div className="w-7 h-7 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
+            <Bot className="w-4 h-4" />
           </div>
           <div>
             <div className="text-xs font-bold text-slate-100">
@@ -116,14 +173,14 @@ export const GameLayout: React.FC<GameLayoutProps> = ({
         <div className="flex items-center gap-2">
           <button
             onClick={() => setIsSettingsOpen(true)}
-            className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all shadow"
+            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all shadow cursor-pointer"
             title="Settings & Rules"
           >
             <Settings className="w-4 h-4" />
           </button>
           <button
             onClick={onLeaveGame}
-            className="p-2 rounded-lg bg-rose-950/60 hover:bg-rose-900 text-rose-300 hover:text-white transition-all shadow border border-rose-800/40"
+            className="p-1.5 rounded-lg bg-rose-950/60 hover:bg-rose-900 text-rose-300 hover:text-white transition-all shadow border border-rose-800/40 cursor-pointer"
             title="Leave Game"
           >
             <LogOut className="w-4 h-4" />
@@ -132,44 +189,43 @@ export const GameLayout: React.FC<GameLayoutProps> = ({
       </div>
 
       {/* CENTER ZONE: Symmetrical Game Board */}
-      <div className="flex-1 my-1 grid grid-cols-3 gap-2 overflow-hidden items-center justify-center p-1 bg-emerald-900/30 border border-emerald-800/40 rounded-2xl shadow-inner relative">
+      <div className="flex-1 my-1 grid grid-cols-3 gap-1.5 overflow-hidden items-center justify-center p-1 bg-emerald-900/30 border border-emerald-800/40 rounded-2xl shadow-inner relative">
         {/* Left: Staggered Properties */}
         <div className="h-full flex flex-col justify-between p-1 bg-slate-900/40 rounded-xl border border-slate-800/60 overflow-hidden">
           <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center border-b border-slate-800 pb-0.5">
             Opponent Board (${opponentBankValue}M)
           </div>
           <div className="flex-1 flex flex-wrap gap-1 items-start justify-center overflow-y-auto p-1">
-            {opponentProperties.map((card) => (
-              <VisualCard key={card.id} card={card} size="sm" />
-            ))}
+            {opponentSets
+              .filter((s) => s.cards && s.cards.length > 0)
+              .map((set) => (
+                <PropertySetStack key={set.color} set={set} />
+              ))}
           </div>
           <div className="text-[10px] font-bold text-amber-400 uppercase tracking-widest text-center border-t border-slate-800 pt-0.5">
             Your Board (${humanBankValue}M)
           </div>
           <div className="flex-1 flex flex-wrap gap-1 items-end justify-center overflow-y-auto p-1">
-            {humanProperties.map((card) => (
-              <VisualCard
-                key={card.id}
-                card={card}
-                size="sm"
-                onClick={
-                  card.type === "Wildcard"
-                    ? () => handleReassignWildcard(card as WildcardCard)
-                    : undefined
-                }
-              />
-            ))}
+            {humanSets
+              .filter((s) => s.cards && s.cards.length > 0)
+              .map((set) => (
+                <PropertySetStack
+                  key={set.color}
+                  set={set}
+                  onCardClick={handleReassignWildcard}
+                />
+              ))}
           </div>
         </div>
 
         {/* Center: Decks & Discard Pile */}
-        <div className="h-full flex flex-col items-center justify-center gap-3 p-2 bg-slate-900/60 rounded-xl border border-slate-800/80 shadow">
+        <div className="h-full flex flex-col items-center justify-center gap-2 p-1.5 bg-slate-900/60 rounded-xl border border-slate-800/80 shadow">
           {/* Action Deck / Center Pile */}
           <div className="flex flex-col items-center gap-1">
-            <div className="w-20 h-28 rounded-lg bg-gradient-to-br from-amber-600 via-amber-800 to-slate-900 border-2 border-amber-400/80 shadow-2xl flex flex-col items-center justify-center text-amber-200">
-              <Layers className="w-8 h-8 mb-1 animate-pulse" />
-              <span className="text-[10px] font-extrabold uppercase">DECK</span>
-              <span className="text-xs font-black">
+            <div className="w-16 h-24 rounded-lg bg-gradient-to-br from-amber-600 via-amber-800 to-slate-900 border-2 border-amber-400/80 shadow-2xl flex flex-col items-center justify-center text-amber-200">
+              <Layers className="w-6 h-6 mb-0.5 animate-pulse" />
+              <span className="text-[9px] font-extrabold uppercase">DECK</span>
+              <span className="text-[10px] font-black">
                 {state.deck?.length || 0} Left
               </span>
             </div>
@@ -182,7 +238,7 @@ export const GameLayout: React.FC<GameLayoutProps> = ({
                 selectedHandCard.type === "Action") && (
                 <button
                   onClick={() => handlePlayCardToZone("bank")}
-                  className="w-full py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs shadow transition-all"
+                  className="w-full py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-[11px] shadow transition-all cursor-pointer"
                 >
                   Deposit to Bank
                 </button>
@@ -191,7 +247,7 @@ export const GameLayout: React.FC<GameLayoutProps> = ({
                 selectedHandCard.type === "Wildcard") && (
                 <button
                   onClick={() => handlePlayCardToZone("properties")}
-                  className="w-full py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs shadow transition-all"
+                  className="w-full py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-[11px] shadow transition-all cursor-pointer"
                 >
                   Add Property
                 </button>
@@ -199,7 +255,7 @@ export const GameLayout: React.FC<GameLayoutProps> = ({
               {selectedHandCard.type === "Action" && (
                 <button
                   onClick={() => handlePlayCardToZone("center")}
-                  className="w-full py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white font-extrabold text-xs shadow transition-all"
+                  className="w-full py-1 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white font-extrabold text-[11px] shadow transition-all cursor-pointer"
                 >
                   Play Action
                 </button>
@@ -230,10 +286,10 @@ export const GameLayout: React.FC<GameLayoutProps> = ({
       </div>
 
       {/* BOTTOM ZONE: Player Hand & End Turn HUD */}
-      <div className="w-full flex flex-col gap-1.5 bg-slate-900/90 border border-slate-800 rounded-xl p-2 shadow-2xl backdrop-blur">
+      <div className="w-full flex flex-col gap-1 bg-slate-900/90 border border-slate-800 rounded-xl p-1.5 shadow-2xl backdrop-blur">
         <div className="flex items-center justify-between px-1">
-          <div className="flex items-center gap-2">
-            <User className="w-4 h-4 text-amber-400" />
+          <div className="flex items-center gap-1.5">
+            <User className="w-3.5 h-3.5 text-amber-400" />
             <span className="text-xs font-bold text-slate-200">
               Your Hand ({humanHand.length}/7)
             </span>
@@ -248,16 +304,16 @@ export const GameLayout: React.FC<GameLayoutProps> = ({
           {isHumanTurn && (
             <button
               onClick={handleEndTurn}
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-300 hover:to-amber-500 text-slate-950 font-black text-xs shadow-lg flex items-center gap-1.5 active:scale-95 transition-all"
+              className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-300 hover:to-amber-500 text-slate-950 font-black text-xs shadow flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
             >
-              <CheckCircle className="w-4 h-4" />
+              <CheckCircle className="w-3.5 h-3.5" />
               END TURN
             </button>
           )}
         </div>
 
         {/* Overlapping Fan Player Hand Container */}
-        <div className="w-full h-36 flex items-center justify-center overflow-x-auto p-1 gap-1">
+        <div className="w-full h-32 flex items-center justify-center overflow-x-auto p-1 gap-1">
           {humanHand.map((card) => (
             <VisualCard
               key={card.id}
@@ -300,11 +356,25 @@ export const GameLayout: React.FC<GameLayoutProps> = ({
         />
       )}
 
+      {rentModalCard && (
+        <RentColorModal
+          card={rentModalCard}
+          onSelectColor={(color) => {
+            handlePlayCardToZone("center", color);
+            setRentModalCard(null);
+          }}
+          onClose={() => setRentModalCard(null)}
+        />
+      )}
+
       {state.reactionQueue &&
         state.reactionQueue.targetPlayerId === human?.id && (
           <PaymentModal
             amountRequired={state.reactionQueue.actionDetails?.amount || 0}
-            availableCards={[...humanBank, ...humanProperties]}
+            availableCards={[
+              ...humanBank,
+              ...(human ? getPlayerPropertyCards(human) : []),
+            ]}
             onConfirmPayment={(cardIds) => {
               onDispatch({
                 type: "RESOLVE_PAYMENT",

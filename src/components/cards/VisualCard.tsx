@@ -160,9 +160,8 @@ export const VisualCard: React.FC<VisualCardProps> = ({
           {prop.color}
         </div>
         {valueBadge}
-        <div className="flex-1 flex flex-col items-center justify-center p-1 text-center font-semibold text-slate-100">
-          <Landmark className="w-5 h-5 mb-0.5 text-amber-400/80" />
-          <span className="line-clamp-2 leading-tight">{prop.name}</span>
+        <div className="flex-1 flex items-center justify-center p-1 text-center">
+          <Landmark className="w-5 h-5 text-amber-400/80" />
         </div>
       </div>
     );
