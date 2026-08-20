@@ -18,12 +18,26 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
       const saved = localStorage.getItem("dcc-theme");
       if (saved === "light" || saved === "dark") return saved;
     }
-    return "dark";
+    return "light";
   });
+
+  const applyThemeToDOM = (mode: ThemeMode) => {
+    if (typeof document === "undefined") return;
+    const root = document.documentElement;
+    root.setAttribute("data-theme", mode);
+    if (mode === "light") {
+      root.classList.add("light", "light-theme");
+      root.classList.remove("dark", "dark-theme");
+    } else {
+      root.classList.add("dark", "dark-theme");
+      root.classList.remove("light", "light-theme");
+    }
+  };
 
   const setTheme = (mode: ThemeMode) => {
     setThemeState(mode);
     localStorage.setItem("dcc-theme", mode);
+    applyThemeToDOM(mode);
   };
 
   const toggleTheme = () => {
@@ -31,14 +45,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   useEffect(() => {
-    const root = document.documentElement;
-    if (theme === "light") {
-      root.classList.add("light-theme");
-      root.classList.remove("dark-theme");
-    } else {
-      root.classList.add("dark-theme");
-      root.classList.remove("light-theme");
-    }
+    applyThemeToDOM(theme);
   }, [theme]);
 
   return (

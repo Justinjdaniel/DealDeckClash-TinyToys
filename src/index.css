@@ -142,3 +142,32 @@
 .transform-style-3d {
   transform-style: preserve-3d;
 }
+
+/* Light Theme Overrides */
+html[data-theme="light"] body,
+html.light body,
+.light-theme body {
+  background-color: #1e3a2b;
+  color: #0f172a;
+}
+
+html[data-theme="light"] .bg-radial-gradient-felt,
+html.light .bg-radial-gradient-felt,
+.light-theme .bg-radial-gradient-felt {
+  background: radial-gradient(
+    circle at 50% 50%,
+    #22c55e 0%,
+    #16a34a 70%,
+    #15803d 100%
+  );
+}
+
+html[data-theme="light"] .glass-panel,
+html.light .glass-panel,
+.light-theme .glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(203, 213, 225, 0.6);
+  color: #0f172a;
+}
