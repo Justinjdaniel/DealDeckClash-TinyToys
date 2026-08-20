@@ -81,7 +81,7 @@ The UI fits fixed viewport heights (`100dvh`) without page scrolling, organizing
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-username/DealDeckClash-TinyToys.git
+   git clone https://github.com/Judtinjdaniel/DealDeckClash-TinyToys.git
    cd DealDeckClash-TinyToys
    ```
 
